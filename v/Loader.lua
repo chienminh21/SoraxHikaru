@@ -3,7 +3,8 @@ local BASE = "https://raw.githubusercontent.com/chienminh21/SoraxHikaru/main/"
 
 
 local Games = {
-    [137826330724902] = "Game/Scaryshawarma.lua", 
+    [137826330724902] = "Games/LSSK.lua", 
+    [128001665358186] = "Games/SK.lua", 
 }
 
 local function fetch(path)
