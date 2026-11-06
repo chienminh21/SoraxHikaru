@@ -8,5 +8,5 @@ loadstring(game:HttpGet('https://raw.githubusercontent.com/chienminh21/SoraxHika
 
 ### My discord Server:
 ```css
-[discord.gg/ebKdZTmvrR](https://discord.gg/6y7TpYTBkW)
+[dis.gg/ebKdZTmvrR]
 ```
