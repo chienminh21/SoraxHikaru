@@ -1,6 +1,6 @@
 getgenv().GG = getgenv().GG or {}
 
--- Defaults (có thể ghi đè bằng getgenv().GG trước khi load)
+-- Defaults 
 GG.SelectedLanguage = GG.SelectedLanguage or "en"
 GG.Theme = GG.Theme or "Dark"
 GG.UIName = GG.UIName or "Sora x Hikaru"
