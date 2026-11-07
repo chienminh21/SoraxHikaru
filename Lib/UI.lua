@@ -1,26 +1,4 @@
---[[
-    ====================== CUSTOM ======================
-    Viết ở ngoài trước khi load UI:
 
-    getgenv().GG = {
-        Theme = "Light",                    -- "Light" | "Dark"
-        SelectedLanguage = "en",
-
-        -- Custom màu chữ
-        TextColor = Color3.fromRGB(30, 30, 40),          -- chữ chính
-        TextSecondaryColor = Color3.fromRGB(90, 90, 110), -- chữ phụ
-
-        -- Custom accent
-        AccentColor = Color3.fromRGB(99, 102, 241),
-
-        -- Galactic Text (chữ hiệu ứng)
-        GalacticText = true,                -- bật/tắt
-        GalacticColor1 = Color3.fromRGB(99, 102, 241),   -- màu 1
-        GalacticColor2 = Color3.fromRGB(236, 72, 153),   -- màu 2 (hồng)
-        GalacticSpeed = 1.5,                -- tốc độ chạy gradient
-    }
-    ====================================================
-]]
 
 getgenv().GG = getgenv().GG or {}
 
@@ -87,7 +65,7 @@ local Theme = {
 
 local CurrentTheme = Theme[GG.Theme] or Theme.Light
 
--- Apply custom colors nếu user set
+-- Apply custom colors if user set
 if GG.TextColor then
     CurrentTheme.TextPrimary = GG.TextColor
 end
