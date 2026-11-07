@@ -5,13 +5,24 @@ getgenv().GG = getgenv().GG or {}
 -- Default values
 GG.SelectedLanguage = GG.SelectedLanguage or "en"
 GG.Theme = GG.Theme or "Light"
+
+-- Tên & Folder (viết ngoài được)
+GG.UIName     = GG.UIName     or "Sora x Hikaru"   -- chữ hiện trên UI
+GG.FolderName = GG.FolderName or "SoraHikaru"      -- folder lưu config
+GG.GuiName    = GG.GuiName    or "SoraHikaru"      -- tên ScreenGui
+
+GG.Transparency = GG.Transparency or 0.25          -- 0 = đục, 1 = trong suốt hoàn toàn
 GG.TextColor = GG.TextColor or nil
 GG.TextSecondaryColor = GG.TextSecondaryColor or nil
 GG.AccentColor = GG.AccentColor or nil
-GG.GalacticText = GG.GalacticText ~= false   -- mặc định bật
+GG.GalacticText = GG.GalacticText ~= false          -- mặc định bật
 GG.GalacticColor1 = GG.GalacticColor1 or Color3.fromRGB(99, 102, 241)
 GG.GalacticColor2 = GG.GalacticColor2 or Color3.fromRGB(236, 72, 153)
 GG.GalacticSpeed = GG.GalacticSpeed or 1.5
+
+local UI_NAME     = GG.UIName
+local FOLDER_NAME = GG.FolderName
+local GUI_NAME    = GG.GuiName
 
 GG.Language = GG.Language or {
     CheckboxEnabled = "Enabled",
@@ -65,7 +76,7 @@ local Theme = {
 
 local CurrentTheme = Theme[GG.Theme] or Theme.Light
 
--- Apply custom colors if user set
+-- Apply custom colors nếu user set
 if GG.TextColor then
     CurrentTheme.TextPrimary = GG.TextColor
 end
@@ -103,14 +114,14 @@ local CoreGui = cloneref(game:GetService('CoreGui'))
 local Debris = cloneref(game:GetService('Debris'))
 
 local mouse = Players.LocalPlayer:GetMouse()
-local old_SoraHikaru = CoreGui:FindFirstChild('SoraHikaru')
+local old_SoraHikaru = CoreGui:FindFirstChild(GUI_NAME)
 
 if old_SoraHikaru then
     Debris:AddItem(old_SoraHikaru, 0)
 end
 
-if not isfolder("SoraHikaru") then
-    makefolder("SoraHikaru")
+if not isfolder(FOLDER_NAME) then
+    makefolder(FOLDER_NAME)
 end
 
 
@@ -339,7 +350,7 @@ local Config = setmetatable({
     save = function(self: any, file_name: any, config: any)
         local success_save, result = pcall(function()
             local flags = HttpService:JSONEncode(config)
-            writefile('SoraHikaru/'..file_name..'.json', flags)
+            writefile(FOLDER_NAME..'/'..file_name..'.json', flags)
         end)
     
         if not success_save then
@@ -348,13 +359,13 @@ local Config = setmetatable({
     end,
     load = function(self: any, file_name: any, config: any)
         local success_load, result = pcall(function()
-            if not isfile('SoraHikaru/'..file_name..'.json') then
+            if not isfile(FOLDER_NAME..'/'..file_name..'.json') then
                 self:save(file_name, config)
         
                 return
             end
         
-            local flags = readfile('SoraHikaru/'..file_name..'.json')
+            local flags = readfile(FOLDER_NAME..'/'..file_name..'.json')
         
             if not flags then
                 self:save(file_name, config)
@@ -651,7 +662,7 @@ end
 
 getgenv().SxH_Notify = Notify
 
--- Compatible with old code
+-- Tương thích với code cũ
 function Library.SendNotification(settings)
     return Notify.Send(settings)
 end
@@ -706,30 +717,30 @@ end
 
 
 function Library:create_ui()
-    local old_SoraHikaru = CoreGui:FindFirstChild('SoraHikaru')
+    local old_SoraHikaru = CoreGui:FindFirstChild(GUI_NAME)
 
     if old_SoraHikaru then
         Debris:AddItem(old_SoraHikaru, 0)
     end
 
-    local SoraHikaru = Instance.new('ScreenGui')
-    SoraHikaru.ResetOnSpawn = false
-    SoraHikaru.Name = 'SoraHikaru'
-    SoraHikaru.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    SoraHikaru.Parent = CoreGui
+    local MainGui = Instance.new('ScreenGui')
+    MainGui.ResetOnSpawn = false
+    MainGui.Name = GUI_NAME
+    MainGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    MainGui.Parent = CoreGui
     
     local Container = Instance.new('Frame')
     Container.ClipsDescendants = true
     Container.BorderColor3 = Color3.fromRGB(0, 0, 0)
     Container.AnchorPoint = Vector2.new(0.5, 0.5)
     Container.Name = 'Container'
-    Container.BackgroundTransparency = 0.25  -- trong suốt hơn
+    Container.BackgroundTransparency = GG.Transparency or 0.25
     Container.BackgroundColor3 = CurrentTheme.Background
     Container.Position = UDim2.new(0.5, 0, 0.5, 0)
     Container.Size = UDim2.new(0, 0, 0, 0)
     Container.Active = true
     Container.BorderSizePixel = 0
-    Container.Parent = SoraHikaru
+    Container.Parent = MainGui
     
     local UICorner = Instance.new('UICorner')
     UICorner.CornerRadius = UDim.new(0, 12)
@@ -774,7 +785,7 @@ function Library:create_ui()
     ClientName.FontFace = Font.new('rbxasset://fonts/families/GothamSSm.json', Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
     ClientName.TextColor3 = Color3.fromRGB(255, 255, 255)
     ClientName.TextTransparency = 0
-    ClientName.Text = 'Sora x Hikaru'
+    ClientName.Text = UI_NAME
     ClientName.Name = 'ClientName'
     ClientName.Size = UDim2.new(0, 110, 0, 16)
     ClientName.AnchorPoint = Vector2.new(0, 0.5)
@@ -795,7 +806,7 @@ function Library:create_ui()
         }
         UIGradient.Parent = ClientName
 
-        -- loop gradient working
+        -- Chạy gradient liên tục
         task.spawn(function()
             local offset = 0
             while ClientName and ClientName.Parent do
@@ -868,7 +879,7 @@ function Library:create_ui()
     local UIScale = Instance.new('UIScale')
     UIScale.Parent = Container    
     
-    self._ui = SoraHikaru
+    self._ui = MainGui
 
     local function on_drag(input: InputObject, process: boolean)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then 
@@ -925,7 +936,7 @@ function Library:create_ui()
     end;
 
     function self:UIVisiblity()
-        SoraHikaru.Enabled = not SoraHikaru.Enabled;
+        MainGui.Enabled = not MainGui.Enabled;
     end;
 
     function self:change_visiblity(state: boolean)
@@ -944,7 +955,7 @@ function Library:create_ui()
     function self:load()
         local content = {}
     
-        for _, object in SoraHikaru:GetDescendants() do
+        for _, object in MainGui:GetDescendants() do
             if not object:IsA('ImageLabel') then
                 continue
             end
@@ -1258,7 +1269,7 @@ function Library:create_ui()
                 ModuleName.Text = settings.title or "Skibidi"
             else
                 ModuleName.RichText = true
-                ModuleName.Text = settings.richtext or "<font color='rgb(255,0,0)'>SoraHikaru</font> user"
+                ModuleName.Text = settings.richtext or "<font color='rgb(255,0,0)'>" .. UI_NAME .. "</font> user"
             end;
             ModuleName.Name = 'ModuleName'
             ModuleName.Size = UDim2.new(0, 205, 0, 13)
@@ -1606,7 +1617,7 @@ function Library:create_ui()
                     Body.Text = settings.text or "Skibidi"
                 else
                     Body.RichText = true
-                    Body.Text = settings.richtext or "<font color='rgb(255,0,0)'>SoraHikaru</font> user"
+                    Body.Text = settings.richtext or "<font color='rgb(255,0,0)'>" .. UI_NAME .. "</font> user"
                 end
                 
                 Body.Size = UDim2.new(1, -10, 0, 20)
@@ -1676,7 +1687,7 @@ function Library:create_ui()
                     Body.Text = settings.text or "Skibidi" -- Default text
                 else
                     Body.RichText = true
-                    Body.Text = settings.richtext or "<font color='rgb(255,0,0)'>SoraHikaru</font> user" -- Default rich text
+                    Body.Text = settings.richtext or "<font color='rgb(255,0,0)'>" .. UI_NAME .. "</font> user" -- Default rich text
                 end
             
                 Body.Size = UDim2.new(1, -10, 1, 0)
@@ -1707,7 +1718,7 @@ function Library:create_ui()
                         Body.Text = new_settings.text or "Skibidi" -- Default text
                     else
                         Body.RichText = true
-                        Body.Text = new_settings.richtext or "<font color='rgb(255,0,0)'>SoraHikaru</font> user" -- Default rich text
+                        Body.Text = new_settings.richtext or "<font color='rgb(255,0,0)'>" .. UI_NAME .. "</font> user" -- Default rich text
                     end
                 end;
             
