@@ -12,6 +12,7 @@ GG.FolderName = GG.FolderName or "SoraHikaru"      -- folder lưu config
 GG.GuiName    = GG.GuiName    or "SoraHikaru"      -- tên ScreenGui
 
 GG.Transparency = GG.Transparency or 0.25          -- 0 = đục, 1 = trong suốt hoàn toàn
+GG.Watermark = GG.Watermark ~= false               -- watermark góc màn hình
 GG.TextColor = GG.TextColor or nil
 GG.TextSecondaryColor = GG.TextSecondaryColor or nil
 GG.AccentColor = GG.AccentColor or nil
@@ -406,9 +407,106 @@ local Library = {
 
     _dragging = false,
     _drag_start = nil,
-    _container_position = nil
+    _container_position = nil,
+
+    _all_modules = {},  -- for Search
 }
 Library.__index = Library
+
+-- ===================== Config Manager =====================
+function Library.SaveConfig()
+    Config:save(game.GameId, Library._config)
+    if Library.Notify then
+        Library.Notify.Success("Config", "Đã lưu config", 3)
+    end
+end
+
+function Library.LoadConfig()
+    Library._config = Config:load(game.GameId)
+    if Library.Notify then
+        Library.Notify.Info("Config", "Đã load config (mở lại UI để áp dụng đầy đủ)", 4)
+    end
+    return Library._config
+end
+
+function Library.ResetConfig()
+    Library._config = {
+        _flags = {},
+        _keybinds = {},
+        _library = {}
+    }
+    Config:save(game.GameId, Library._config)
+    if Library.Notify then
+        Library.Notify.Warn("Config", "Đã reset config về mặc định", 3)
+    end
+end
+
+-- ===================== Watermark =====================
+function Library.CreateWatermark(text)
+    if getgenv().SxH_Watermark then
+        pcall(function() getgenv().SxH_Watermark:Destroy() end)
+    end
+
+    local wmGui = Instance.new("ScreenGui")
+    wmGui.Name = "SxH_Watermark"
+    wmGui.ResetOnSpawn = false
+    wmGui.IgnoreGuiInset = true
+    wmGui.DisplayOrder = 50
+    wmGui.Parent = CoreGui
+
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0, 0, 0, 28)
+    frame.AutomaticSize = Enum.AutomaticSize.X
+    frame.Position = UDim2.new(0, 12, 0, 12)
+    frame.BackgroundColor3 = CurrentTheme.Card or CurrentTheme.BackgroundSecondary
+    frame.BackgroundTransparency = 0.15
+    frame.BorderSizePixel = 0
+    frame.Parent = wmGui
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 6)
+    corner.Parent = frame
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = CurrentTheme.Accent
+    stroke.Transparency = 0.5
+    stroke.Parent = frame
+
+    local pad = Instance.new("UIPadding")
+    pad.PaddingLeft = UDim.new(0, 10)
+    pad.PaddingRight = UDim.new(0, 10)
+    pad.Parent = frame
+
+    local label = Instance.new("TextLabel")
+    label.BackgroundTransparency = 1
+    label.Size = UDim2.new(0, 0, 1, 0)
+    label.AutomaticSize = Enum.AutomaticSize.X
+    label.Font = Enum.Font.GothamBold
+    label.TextSize = 12
+    label.TextColor3 = CurrentTheme.TextPrimary
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = frame
+
+    local showText = text or UI_NAME
+    local fps = 0
+    local frames = 0
+    local last = os.clock()
+
+    RunService.RenderStepped:Connect(function()
+        frames += 1
+        local now = os.clock()
+        if now - last >= 1 then
+            fps = frames
+            frames = 0
+            last = now
+            label.Text = string.format("%s  |  %d FPS", showText, fps)
+        end
+    end)
+    label.Text = showText .. "  |  -- FPS"
+
+    getgenv().SxH_Watermark = wmGui
+    return wmGui
+end
 
 
 function Library.new()
@@ -846,6 +944,54 @@ function Library:create_ui()
     Icon.BorderSizePixel = 0
     Icon.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     Icon.Parent = Handler
+
+    -- ===================== Search Bar =====================
+    local SearchContainer = Instance.new("Frame")
+    SearchContainer.Name = "SearchContainer"
+    SearchContainer.Size = UDim2.new(0, 220, 0, 28)
+    SearchContainer.Position = UDim2.new(0, 165, 0, 12)
+    SearchContainer.BackgroundColor3 = CurrentTheme.Card or CurrentTheme.BackgroundSecondary
+    SearchContainer.BackgroundTransparency = 0.15
+    SearchContainer.BorderSizePixel = 0
+    SearchContainer.Parent = Handler
+
+    local SearchCorner = Instance.new("UICorner")
+    SearchCorner.CornerRadius = UDim.new(0, 8)
+    SearchCorner.Parent = SearchContainer
+
+    local SearchStroke = Instance.new("UIStroke")
+    SearchStroke.Color = CurrentTheme.Stroke
+    SearchStroke.Transparency = 0.4
+    SearchStroke.Parent = SearchContainer
+
+    local SearchBox = Instance.new("TextBox")
+    SearchBox.Size = UDim2.new(1, -12, 1, 0)
+    SearchBox.Position = UDim2.new(0, 10, 0, 0)
+    SearchBox.BackgroundTransparency = 1
+    SearchBox.PlaceholderText = "Search modules..."
+    SearchBox.PlaceholderColor3 = CurrentTheme.TextSecondary
+    SearchBox.TextColor3 = CurrentTheme.TextPrimary
+    SearchBox.Font = Enum.Font.Gotham
+    SearchBox.TextSize = 12
+    SearchBox.TextXAlignment = Enum.TextXAlignment.Left
+    SearchBox.ClearTextOnFocus = false
+    SearchBox.Text = ""
+    SearchBox.Parent = SearchContainer
+
+    local function FilterModules(text)
+        text = string.lower(text or "")
+        for _, data in ipairs(Library._all_modules) do
+            if text == "" or string.find(data.title, text, 1, true) then
+                data.frame.Visible = true
+            else
+                data.frame.Visible = false
+            end
+        end
+    end
+
+    SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
+        FilterModules(SearchBox.Text)
+    end)
     
     local Divider = Instance.new('Frame')
     Divider.Name = 'Divider'
@@ -981,6 +1127,12 @@ function Library:create_ui()
         }):Play()
 
         AcrylicBlur.new(Container)
+
+        -- Watermark (mặc định bật, tắt bằng GG.Watermark = false)
+        if GG.Watermark ~= false then
+            Library.CreateWatermark(UI_NAME)
+        end
+
         self._ui_loaded = true
     end
 
@@ -1217,6 +1369,12 @@ function Library:create_ui()
             Module.BorderSizePixel = 0
             Module.BackgroundColor3 = CurrentTheme.ModuleBackground
             Module.Parent = settings.section
+
+            -- Track for Search
+            table.insert(Library._all_modules, {
+                frame = Module,
+                title = string.lower(settings.title or "")
+            })
 
             local UIListLayout = Instance.new('UIListLayout')
             UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
