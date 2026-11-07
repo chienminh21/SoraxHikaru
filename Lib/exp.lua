@@ -4,7 +4,8 @@ local main = Library.new()
 -- Tabs
 local combat_tab = main:create_tab("Combat", "rbxassetid://76499042599127")
 local utility_tab = main:create_tab("Utility", "rbxassetid://126017907477623")
-
+-- Đổi theme (trước khi tạo UI)
+getgenv().GG.Theme = "Light"  -- hoặc "Dark"
 -- Combat Module
 local aimbot = combat_tab:create_module({
   title = "Aimbot",
