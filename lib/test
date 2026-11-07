@@ -18,47 +18,72 @@
 local SCRIPT_NAME = "Sora x Hikaru"     -- title shown in the sidebar
 local GUI_NAME = "SoraxHikaruUI"        -- ScreenGui name
 local FOLDER = "SoraxHikaru"            -- folder used to save configs
-local LOGO = ""                         -- optional logo asset id, e.g. "rbxassetid://123456"
+local LOGO = "rbxassetid://107819132007001" -- logo asset id ("" = no logo)
 local TOGGLE_KEY = Enum.KeyCode.Insert  -- key that shows / hides the window (PC)
+local VERSION = "v2.0"                -- shown in the info card and watermark
 local USE_BLUR = true                   -- acrylic blur behind the window
 
--- Color themes: set THEME to "White" or "Dark"
-local THEME = "White"
+-- Color themes: set THEME to "Dark" or "White"
+local THEME = "Dark"
 
 local Themes = {
+    Dark = {
+        Background = Color3.fromRGB(14, 16, 28),
+        Sidebar = Color3.fromRGB(17, 19, 35),
+        Module = Color3.fromRGB(19, 21, 37),
+        Item = Color3.fromRGB(30, 34, 58),
+        ItemHover = Color3.fromRGB(41, 46, 76),
+        Stroke = Color3.fromRGB(40, 45, 72),
+        StrokeStrong = Color3.fromRGB(58, 64, 100),
+        Accent = Color3.fromRGB(99, 102, 241),
+        Text = Color3.fromRGB(240, 242, 252),
+        SubText = Color3.fromRGB(122, 128, 160),
+        TabInactive = Color3.fromRGB(190, 194, 218),
+        TabActiveA = Color3.fromRGB(66, 72, 170),
+        TabActiveB = Color3.fromRGB(30, 34, 76),
+        ToggleOnTrack = Color3.fromRGB(58, 64, 112),
+        ToggleOnKnob = Color3.fromRGB(120, 130, 255),
+        ToggleOffTrack = Color3.fromRGB(40, 45, 74),
+        ToggleOffKnob = Color3.fromRGB(86, 92, 128),
+        TitleA = Color3.fromRGB(124, 136, 255),
+        TitleB = Color3.fromRGB(218, 80, 240),
+        GradA = Color3.fromRGB(88, 101, 242),
+        GradB = Color3.fromRGB(130, 96, 255),
+        White = Color3.fromRGB(255, 255, 255),
+        Success = Color3.fromRGB(80, 110, 255),
+        Warning = Color3.fromRGB(245, 180, 50),
+        Error = Color3.fromRGB(240, 85, 85),
+    },
     White = {
         Background = Color3.fromRGB(246, 247, 250),
+        Sidebar = Color3.fromRGB(238, 240, 246),
         Module = Color3.fromRGB(255, 255, 255),
         Item = Color3.fromRGB(236, 239, 245),
         ItemHover = Color3.fromRGB(224, 229, 239),
         Stroke = Color3.fromRGB(208, 214, 226),
+        StrokeStrong = Color3.fromRGB(190, 196, 212),
         Accent = Color3.fromRGB(70, 115, 235),
         Text = Color3.fromRGB(28, 31, 38),
         SubText = Color3.fromRGB(105, 112, 128),
-        ToggleOff = Color3.fromRGB(205, 211, 224),
+        TabInactive = Color3.fromRGB(90, 98, 118),
+        TabActiveA = Color3.fromRGB(200, 214, 255),
+        TabActiveB = Color3.fromRGB(225, 232, 250),
+        ToggleOnTrack = Color3.fromRGB(70, 115, 235),
+        ToggleOnKnob = Color3.fromRGB(255, 255, 255),
+        ToggleOffTrack = Color3.fromRGB(205, 211, 224),
+        ToggleOffKnob = Color3.fromRGB(255, 255, 255),
+        TitleA = Color3.fromRGB(70, 115, 235),
+        TitleB = Color3.fromRGB(150, 80, 230),
+        GradA = Color3.fromRGB(70, 115, 235),
+        GradB = Color3.fromRGB(110, 140, 245),
         White = Color3.fromRGB(255, 255, 255),
         Success = Color3.fromRGB(46, 170, 100),
         Warning = Color3.fromRGB(235, 160, 30),
         Error = Color3.fromRGB(225, 70, 70),
     },
-    Dark = {
-        Background = Color3.fromRGB(17, 19, 32),
-        Module = Color3.fromRGB(24, 27, 46),
-        Item = Color3.fromRGB(33, 37, 62),
-        ItemHover = Color3.fromRGB(43, 48, 78),
-        Stroke = Color3.fromRGB(50, 56, 90),
-        Accent = Color3.fromRGB(99, 102, 241),
-        Text = Color3.fromRGB(235, 237, 250),
-        SubText = Color3.fromRGB(135, 141, 172),
-        ToggleOff = Color3.fromRGB(52, 58, 92),
-        White = Color3.fromRGB(255, 255, 255),
-        Success = Color3.fromRGB(60, 200, 120),
-        Warning = Color3.fromRGB(245, 180, 50),
-        Error = Color3.fromRGB(240, 85, 85),
-    },
 }
 
-local Theme = Themes[THEME] or Themes.White
+local Theme = Themes[THEME] or Themes.Dark
 
 ---------------------------------------------------------------------
 -- Services
@@ -71,6 +96,7 @@ local TweenService = cloneref(game:GetService("TweenService"))
 local HttpService = cloneref(game:GetService("HttpService"))
 local TextService = cloneref(game:GetService("TextService"))
 local Lighting = cloneref(game:GetService("Lighting"))
+local RunService = cloneref(game:GetService("RunService"))
 local CoreGui = cloneref(game:GetService("CoreGui"))
 
 local env = (getgenv and getgenv()) or _G
@@ -387,7 +413,7 @@ function Notifications:ensure()
         Name = "Holder",
         AnchorPoint = Vector2.new(1, 0),
         Position = UDim2.new(1, -12, 0, 12),
-        Size = UDim2.new(0, 300, 1, -24),
+        Size = UDim2.new(0, 270, 1, -24),
         BackgroundTransparency = 1,
     }, self._gui)
 
@@ -417,6 +443,7 @@ function Notifications:send(settings)
 
     local kind = NOTIFY_COLORS[settings.type] and settings.type or "info"
     local color = NOTIFY_COLORS[kind]
+    local symbols = { info = "i", success = "\226\156\147", warning = "!", error = "x" }
     local duration = tonumber(settings.duration) or 4
     self._order += 1
 
@@ -437,20 +464,28 @@ function Notifications:send(settings)
         BackgroundColor3 = Theme.Module,
         BackgroundTransparency = 1,
         BorderSizePixel = 0,
-        ClipsDescendants = true,
         Active = true,
     }, wrapper)
-    new("UICorner", { CornerRadius = UDim.new(0, 6) }, inner)
-    new("UIStroke", { Color = Theme.Stroke, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, inner)
+    new("UICorner", { CornerRadius = UDim.new(0, 14) }, inner)
+    new("UIStroke", { Color = Theme.StrokeStrong, Thickness = 1.2, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, inner)
 
-    -- Colored bar on the left
-    new("Frame", {
-        Name = "Accent",
-        Size = UDim2.new(0, 3, 1, 0),
+    -- Round icon on the left
+    local icon = new("Frame", {
+        Name = "Icon",
+        Position = UDim2.fromOffset(12, 9),
+        Size = UDim2.fromOffset(22, 22),
         BackgroundColor3 = color,
         BorderSizePixel = 0,
-        ZIndex = 2,
     }, inner)
+    new("UICorner", { CornerRadius = UDim.new(1, 0) }, icon)
+    new("TextLabel", {
+        Size = UDim2.fromScale(1, 1),
+        BackgroundTransparency = 1,
+        Font = Enum.Font.GothamBold,
+        TextSize = 13,
+        TextColor3 = Color3.new(1, 1, 1),
+        Text = symbols[kind],
+    }, icon)
 
     local content = new("Frame", {
         Name = "Content",
@@ -459,12 +494,12 @@ function Notifications:send(settings)
         BackgroundTransparency = 1,
     }, inner)
     new("UIPadding", {
-        PaddingTop = UDim.new(0, 9),
-        PaddingBottom = UDim.new(0, 12),
-        PaddingLeft = UDim.new(0, 14),
-        PaddingRight = UDim.new(0, 10),
+        PaddingTop = UDim.new(0, 11),
+        PaddingBottom = UDim.new(0, 11),
+        PaddingLeft = UDim.new(0, 46),
+        PaddingRight = UDim.new(0, 14),
     }, content)
-    new("UIListLayout", { Padding = UDim.new(0, 3), SortOrder = Enum.SortOrder.LayoutOrder }, content)
+    new("UIListLayout", { Padding = UDim.new(0, 2), SortOrder = Enum.SortOrder.LayoutOrder }, content)
 
     local function label(text, font, size, text_color, order)
         return new("TextLabel", {
@@ -483,23 +518,11 @@ function Notifications:send(settings)
     end
 
     if settings.title and settings.title ~= "" then
-        label(tostring(settings.title), Enum.Font.GothamBold, 14, Theme.Text, 1)
+        label(tostring(settings.title), Enum.Font.GothamMedium, 13, Theme.Text, 1)
     end
     if settings.text and settings.text ~= "" then
-        label(tostring(settings.text), Enum.Font.Gotham, 12, Theme.SubText, 2)
+        label(tostring(settings.text), Enum.Font.Gotham, 11, Theme.SubText, 2)
     end
-
-    -- Progress bar shows the remaining time
-    local progress = new("Frame", {
-        Name = "Progress",
-        AnchorPoint = Vector2.new(0, 1),
-        Position = UDim2.new(0, 0, 1, 0),
-        Size = UDim2.new(1, 0, 0, 2),
-        BackgroundColor3 = color,
-        BackgroundTransparency = 0.3,
-        BorderSizePixel = 0,
-        ZIndex = 2,
-    }, inner)
 
     local closing = false
     local entry = {}
@@ -534,11 +557,8 @@ function Notifications:send(settings)
         end
     end)
 
-    -- Slide in
-    tween(inner, { Position = UDim2.new(0, 0, 0, 0), BackgroundTransparency = 0.02 }, 0.4)
-
-    -- Auto close when the progress bar runs out
-    tween(progress, { Size = UDim2.new(0, 0, 0, 2) }, duration, Enum.EasingStyle.Linear)
+    -- Slide in, then auto close
+    tween(inner, { Position = UDim2.new(0, 0, 0, 0), BackgroundTransparency = 0.03 }, 0.4)
     task.delay(duration, dismiss)
 
     return entry
@@ -653,13 +673,13 @@ function Library:create_ui()
         ClipsDescendants = true,
         AnchorPoint = Vector2.new(0.5, 0.5),
         BackgroundColor3 = Theme.Background,
-        BackgroundTransparency = 0.05,
+        BackgroundTransparency = 0.04,
         Position = UDim2.new(0.5, 0, 0.5, 0),
         Size = UDim2.new(0, 0, 0, 0),
         Active = true,
         BorderSizePixel = 0,
     }, ScreenGui)
-    new("UICorner", { CornerRadius = UDim.new(0, 10) }, Container)
+    new("UICorner", { CornerRadius = UDim.new(0, 12) }, Container)
     new("UIStroke", { Color = Theme.Stroke, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, Container)
     local UIScale = new("UIScale", nil, Container)
 
@@ -670,11 +690,20 @@ function Library:create_ui()
         BorderSizePixel = 0,
     }, Container)
 
+    -- Slightly different tone behind the sidebar
+    new("Frame", {
+        Name = "Sidebar",
+        BackgroundColor3 = Theme.Sidebar,
+        BackgroundTransparency = 0.3,
+        Size = UDim2.new(0, 164, 0, 479),
+        BorderSizePixel = 0,
+    }, Handler)
+
     -- Invisible bar at the top used to drag the window (so sliders never move it)
     local DragBar = new("Frame", {
         Name = "DragBar",
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 0, 38),
+        Size = UDim2.new(1, 0, 0, 44),
         Active = true,
     }, Handler)
 
@@ -682,58 +711,129 @@ function Library:create_ui()
         Name = "Tabs",
         ScrollBarImageTransparency = 1,
         ScrollBarThickness = 0,
-        Size = UDim2.new(0, 129, 0, 401),
+        Size = UDim2.fromOffset(144, 330),
         Selectable = false,
         AutomaticCanvasSize = Enum.AutomaticSize.Y,
         CanvasSize = UDim2.new(0, 0, 0, 0),
         BackgroundTransparency = 1,
-        Position = UDim2.new(0.026, 0, 0.111, 0),
+        Position = UDim2.fromOffset(10, 55),
         BorderSizePixel = 0,
     }, Handler)
-    new("UIListLayout", { Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder }, Tabs)
+    new("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }, Tabs)
 
-    -- Script name in the sidebar
+    -- Logo + gradient script name
     local has_logo = LOGO ~= ""
-    new("TextLabel", {
-        Name = "ClientName",
-        Font = Enum.Font.GothamBold,
-        TextColor3 = Theme.Accent,
-        Text = SCRIPT_NAME,
-        Size = UDim2.new(0, 140, 0, 14),
-        AnchorPoint = Vector2.new(0, 0.5),
-        Position = has_logo and UDim2.new(0.056, 0, 0.055, 0) or UDim2.new(0.026, 0, 0.055, 0),
-        BackgroundTransparency = 1,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextSize = 14,
-    }, Handler)
-
     if has_logo then
         new("ImageLabel", {
             Name = "Icon",
-            ImageColor3 = Theme.Accent,
+            ImageColor3 = Theme.TitleA,
             ScaleType = Enum.ScaleType.Fit,
             AnchorPoint = Vector2.new(0, 0.5),
             Image = LOGO,
             BackgroundTransparency = 1,
-            Position = UDim2.new(0.025, 0, 0.055, 0),
-            Size = UDim2.new(0, 18, 0, 18),
+            Position = UDim2.fromOffset(15, 26),
+            Size = UDim2.fromOffset(19, 19),
         }, Handler)
     end
 
-    -- Small bar that follows the selected tab
-    local Pin = new("Frame", {
-        Name = "Pin",
-        Position = UDim2.new(0.026, 0, 0, 64),
-        Size = UDim2.new(0, 2, 0, 16),
-        BorderSizePixel = 0,
-        BackgroundColor3 = Theme.Accent,
+    local ClientName = new("TextLabel", {
+        Name = "ClientName",
+        Font = Enum.Font.GothamMedium,
+        TextColor3 = Color3.new(1, 1, 1),
+        Text = SCRIPT_NAME,
+        Size = UDim2.fromOffset(118, 18),
+        AnchorPoint = Vector2.new(0, 0.5),
+        Position = has_logo and UDim2.fromOffset(43, 26) or UDim2.fromOffset(15, 26),
+        BackgroundTransparency = 1,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextSize = 14,
     }, Handler)
-    new("UICorner", { CornerRadius = UDim.new(1, 0) }, Pin)
+    new("UIGradient", { Color = ColorSequence.new(Theme.TitleA, Theme.TitleB) }, ClientName)
+
+    -- Info card at the bottom of the sidebar
+    local InfoCard = new("Frame", {
+        Name = "InfoCard",
+        Position = UDim2.fromOffset(10, 397),
+        Size = UDim2.fromOffset(144, 44),
+        BackgroundColor3 = Theme.Module,
+        BackgroundTransparency = 0.15,
+        BorderSizePixel = 0,
+    }, Handler)
+    new("UICorner", { CornerRadius = UDim.new(0, 9) }, InfoCard)
+    new("UIStroke", { Color = Theme.Stroke, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, InfoCard)
+
+    local InfoIcon = new("Frame", {
+        Position = UDim2.fromOffset(10, 14),
+        Size = UDim2.fromOffset(16, 16),
+        BackgroundColor3 = Theme.Accent,
+        BorderSizePixel = 0,
+    }, InfoCard)
+    new("UICorner", { CornerRadius = UDim.new(1, 0) }, InfoIcon)
+    new("TextLabel", {
+        Size = UDim2.fromScale(1, 1),
+        BackgroundTransparency = 1,
+        Font = Enum.Font.GothamBold,
+        TextSize = 11,
+        TextColor3 = Color3.new(1, 1, 1),
+        Text = "i",
+    }, InfoIcon)
+
+    new("TextLabel", {
+        Position = UDim2.fromOffset(34, 8),
+        Size = UDim2.fromOffset(104, 14),
+        BackgroundTransparency = 1,
+        Font = Enum.Font.GothamMedium,
+        TextSize = 10,
+        TextColor3 = Theme.Text,
+        Text = SCRIPT_NAME .. " " .. VERSION,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextTruncate = Enum.TextTruncate.AtEnd,
+    }, InfoCard)
+    new("TextLabel", {
+        Position = UDim2.fromOffset(34, 23),
+        Size = UDim2.fromOffset(104, 12),
+        BackgroundTransparency = 1,
+        Font = Enum.Font.Gotham,
+        TextSize = 9,
+        TextColor3 = Theme.SubText,
+        Text = "Have a good day! <3",
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextTruncate = Enum.TextTruncate.AtEnd,
+    }, InfoCard)
+
+    -- Key hint: [*] [Insert] to toggle UI
+    local key_name = TOGGLE_KEY.Name
+    local key_width = text_size(key_name, 10, Enum.Font.GothamMedium).X + 14
+    local function chip(text, x, width, text_color)
+        local c = new("TextLabel", {
+            Text = text,
+            Font = Enum.Font.GothamMedium,
+            TextSize = 10,
+            TextColor3 = text_color,
+            BackgroundColor3 = Theme.Item,
+            Position = UDim2.fromOffset(x, 452),
+            Size = UDim2.fromOffset(width, 18),
+            BorderSizePixel = 0,
+        }, Handler)
+        new("UICorner", { CornerRadius = UDim.new(0, 5) }, c)
+        return c
+    end
+    chip("*", 14, 18, Theme.SubText)
+    chip(key_name, 36, key_width, Theme.Text)
+    new("TextLabel", {
+        Text = "to toggle UI",
+        Font = Enum.Font.Gotham,
+        TextSize = 11,
+        TextColor3 = Theme.SubText,
+        BackgroundTransparency = 1,
+        Position = UDim2.fromOffset(36 + key_width + 6, 452),
+        Size = UDim2.fromOffset(60, 18),
+        TextXAlignment = Enum.TextXAlignment.Left,
+    }, Handler)
 
     new("Frame", {
         Name = "Divider",
-        BackgroundTransparency = 0,
-        Position = UDim2.new(0.235, 0, 0, 0),
+        Position = UDim2.fromOffset(164, 0),
         Size = UDim2.new(0, 1, 0, 479),
         BorderSizePixel = 0,
         BackgroundColor3 = Theme.Stroke,
@@ -747,12 +847,124 @@ function Library:create_ui()
         Text = "",
         AutoButtonColor = false,
         BackgroundTransparency = 1,
-        Position = UDim2.new(0.02, 0, 0.029, 0),
-        Size = UDim2.new(0, 150, 0, 24),
+        Position = UDim2.fromOffset(10, 14),
+        Size = UDim2.fromOffset(150, 24),
         BorderSizePixel = 0,
     }, Handler)
 
+    -- "Show watermark" pill in the bottom-right corner
+    local WatermarkPill = new("Frame", {
+        Name = "WatermarkPill",
+        AnchorPoint = Vector2.new(1, 1),
+        Position = UDim2.new(1, -12, 1, -8),
+        Size = UDim2.fromOffset(140, 28),
+        BackgroundColor3 = Theme.Module,
+        BackgroundTransparency = 0.15,
+        BorderSizePixel = 0,
+    }, Handler)
+    new("UICorner", { CornerRadius = UDim.new(0, 9) }, WatermarkPill)
+    new("UIStroke", { Color = Theme.Stroke, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, WatermarkPill)
+    new("TextLabel", {
+        Position = UDim2.fromOffset(9, 0),
+        Size = UDim2.fromOffset(16, 28),
+        BackgroundTransparency = 1,
+        Font = Enum.Font.GothamBold,
+        TextSize = 12,
+        TextColor3 = Theme.SubText,
+        Text = "\240\159\145\145",
+    }, WatermarkPill)
+    new("TextLabel", {
+        Position = UDim2.fromOffset(28, 0),
+        Size = UDim2.fromOffset(76, 28),
+        BackgroundTransparency = 1,
+        Font = Enum.Font.GothamMedium,
+        TextSize = 10,
+        TextColor3 = Theme.Text,
+        Text = "Show watermark",
+        TextXAlignment = Enum.TextXAlignment.Left,
+    }, WatermarkPill)
+
+    local PillTrack = new("TextButton", {
+        Text = "",
+        AutoButtonColor = false,
+        AnchorPoint = Vector2.new(1, 0.5),
+        Position = UDim2.new(1, -10, 0.5, 0),
+        Size = UDim2.fromOffset(26, 14),
+        BackgroundColor3 = Theme.ToggleOffTrack,
+        BorderSizePixel = 0,
+    }, WatermarkPill)
+    new("UICorner", { CornerRadius = UDim.new(1, 0) }, PillTrack)
+    local PillKnob = new("Frame", {
+        AnchorPoint = Vector2.new(0, 0.5),
+        Position = UDim2.new(0, 2, 0.5, 0),
+        Size = UDim2.fromOffset(10, 10),
+        BackgroundColor3 = Theme.ToggleOffKnob,
+        BorderSizePixel = 0,
+    }, PillTrack)
+    new("UICorner", { CornerRadius = UDim.new(1, 0) }, PillKnob)
+
     self._ui = ScreenGui
+
+    ---------------------------------------------------------------
+    -- Watermark (top-left label with name, version and FPS)
+    ---------------------------------------------------------------
+    local watermark_label = nil
+    local fps_frames, fps_time = 0, 0
+
+    local function apply_watermark(state)
+        tween(PillTrack, { BackgroundColor3 = state and Theme.ToggleOnTrack or Theme.ToggleOffTrack }, 0.3)
+        tween(PillKnob, {
+            Position = state and UDim2.new(1, -12, 0.5, 0) or UDim2.new(0, 2, 0.5, 0),
+            BackgroundColor3 = state and Theme.ToggleOnKnob or Theme.ToggleOffKnob,
+        }, 0.3)
+
+        if state and not watermark_label then
+            watermark_label = new("TextLabel", {
+                Name = "Watermark",
+                Font = Enum.Font.GothamMedium,
+                TextSize = 12,
+                TextColor3 = Theme.Text,
+                BackgroundColor3 = Theme.Module,
+                BackgroundTransparency = 0.1,
+                AutomaticSize = Enum.AutomaticSize.X,
+                Size = UDim2.fromOffset(0, 26),
+                Position = UDim2.fromOffset(12, 8),
+                Text = SCRIPT_NAME .. "  |  " .. VERSION,
+                BorderSizePixel = 0,
+            }, ScreenGui)
+            new("UIPadding", { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10) }, watermark_label)
+            new("UICorner", { CornerRadius = UDim.new(0, 8) }, watermark_label)
+            new("UIStroke", { Color = Theme.Stroke, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, watermark_label)
+            new("UIGradient", { Color = ColorSequence.new(Theme.TitleA, Theme.TitleB) }, watermark_label)
+        elseif not state and watermark_label then
+            watermark_label:Destroy()
+            watermark_label = nil
+        end
+    end
+
+    function self:set_watermark(state)
+        Library._config._library.watermark = state
+        Config:save(game.GameId, Library._config)
+        apply_watermark(state)
+    end
+
+    Connections["watermark_fps"] = RunService.RenderStepped:Connect(function(dt)
+        fps_frames += 1
+        fps_time += dt
+        if fps_time >= 0.5 and watermark_label then
+            watermark_label.Text = string.format("%s  |  %s  |  %d FPS", SCRIPT_NAME, VERSION, math.floor(fps_frames / fps_time + 0.5))
+            fps_frames, fps_time = 0, 0
+        end
+    end)
+
+    local watermark_on = Library._config._library.watermark
+    if watermark_on == nil then watermark_on = true end
+    apply_watermark(watermark_on)
+
+    PillTrack.MouseButton1Click:Connect(function()
+        watermark_on = not watermark_on
+        self:set_watermark(watermark_on)
+    end)
 
     ---------------------------------------------------------------
     -- Dragging
@@ -890,7 +1102,7 @@ function Library:create_ui()
         self._ui_loaded = true
     end
 
-    -- Highlight the selected tab, fade the others
+    -- Highlight the selected tab (gradient pill + left bar), fade the others
     function self:update_tabs(selected)
         for _, object in ipairs(Tabs:GetChildren()) do
             if object.Name ~= "Tab" then continue end
@@ -898,12 +1110,10 @@ function Library:create_ui()
             local active = object == selected
 
             tween(object, { BackgroundTransparency = active and 0 or 1 })
-            tween(object.TextLabel, { TextColor3 = active and Theme.Accent or Theme.SubText })
-            tween(object.Icon, { ImageColor3 = active and Theme.Accent or Theme.SubText })
-
-            if active then
-                tween(Pin, { Position = UDim2.new(0.026, 0, 0, 64 + object.LayoutOrder * 42) })
-            end
+            tween(object.Stroke, { Transparency = active and 0.55 or 1 })
+            tween(object.AccentBar, { BackgroundTransparency = active and 0 or 1 })
+            tween(object.TextLabel, { TextColor3 = active and Theme.Text or Theme.TabInactive })
+            tween(object.Icon, { ImageColor3 = active and Theme.Text or Theme.TabInactive })
         end
     end
 
@@ -925,22 +1135,40 @@ function Library:create_ui()
             Name = "Tab",
             Text = "",
             AutoButtonColor = false,
-            BackgroundColor3 = Theme.Item,
+            BackgroundColor3 = Color3.new(1, 1, 1),
             BackgroundTransparency = 1,
-            Size = UDim2.new(0, 129, 0, 38),
+            Size = UDim2.new(0, 144, 0, 38),
             BorderSizePixel = 0,
             LayoutOrder = self._tab,
         }, Tabs)
-        new("UICorner", { CornerRadius = UDim.new(0, 5) }, Tab)
+        new("UICorner", { CornerRadius = UDim.new(0, 9) }, Tab)
+        new("UIGradient", { Color = ColorSequence.new(Theme.TabActiveA, Theme.TabActiveB) }, Tab)
+        new("UIStroke", {
+            Name = "Stroke",
+            Color = Theme.Accent,
+            Transparency = 1,
+            ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+        }, Tab)
+
+        local AccentBar = new("Frame", {
+            Name = "AccentBar",
+            AnchorPoint = Vector2.new(0, 0.5),
+            Position = UDim2.new(0, 0, 0.5, 0),
+            Size = UDim2.new(0, 3, 1, -12),
+            BackgroundColor3 = Theme.Accent,
+            BackgroundTransparency = 1,
+            BorderSizePixel = 0,
+        }, Tab)
+        new("UICorner", { CornerRadius = UDim.new(1, 0) }, AccentBar)
 
         new("TextLabel", {
             Name = "TextLabel",
-            Font = Enum.Font.GothamSemibold,
-            TextColor3 = Theme.SubText,
+            Font = Enum.Font.GothamMedium,
+            TextColor3 = Theme.TabInactive,
             Text = title,
-            Size = UDim2.new(0, 92, 0, 16),
+            Size = UDim2.new(0, 96, 0, 16),
             AnchorPoint = Vector2.new(0, 0.5),
-            Position = UDim2.new(0.24, 0, 0.5, 0),
+            Position = UDim2.new(0, 40, 0.5, 0),
             BackgroundTransparency = 1,
             TextXAlignment = Enum.TextXAlignment.Left,
             TextTruncate = Enum.TextTruncate.AtEnd,
@@ -950,12 +1178,12 @@ function Library:create_ui()
         new("ImageLabel", {
             Name = "Icon",
             ScaleType = Enum.ScaleType.Fit,
-            ImageColor3 = Theme.SubText,
+            ImageColor3 = Theme.TabInactive,
             AnchorPoint = Vector2.new(0, 0.5),
             BackgroundTransparency = 1,
-            Position = UDim2.new(0.1, 0, 0.5, 0),
+            Position = UDim2.new(0, 14, 0.5, 0),
             Image = icon or "",
-            Size = UDim2.new(0, 12, 0, 12),
+            Size = UDim2.new(0, 16, 0, 16),
         }, Tab)
 
         local function make_section(name, x_position)
@@ -964,7 +1192,7 @@ function Library:create_ui()
                 AutomaticCanvasSize = Enum.AutomaticSize.Y,
                 CanvasSize = UDim2.new(0, 0, 0, 0),
                 ScrollBarThickness = 0,
-                Size = UDim2.new(0, 243, 0, 445),
+                Size = UDim2.new(0, 243, 0, 404),
                 Selectable = false,
                 AnchorPoint = Vector2.new(0, 0.5),
                 ScrollBarImageTransparency = 1,
@@ -1023,7 +1251,7 @@ function Library:create_ui()
                 BorderSizePixel = 0,
             }, section)
             new("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder }, Module)
-            new("UICorner", { CornerRadius = UDim.new(0, 5) }, Module)
+            new("UICorner", { CornerRadius = UDim.new(0, 12) }, Module)
             new("UIStroke", { Color = Theme.Stroke, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, Module)
 
             local Header = new("TextButton", {
@@ -1037,28 +1265,27 @@ function Library:create_ui()
 
             new("ImageLabel", {
                 Name = "Icon",
-                ImageColor3 = Theme.Accent,
+                ImageColor3 = Theme.SubText,
                 ScaleType = Enum.ScaleType.Fit,
-                ImageTransparency = 0.3,
                 AnchorPoint = Vector2.new(0, 0.5),
                 Image = "rbxassetid://79095934438045",
                 BackgroundTransparency = 1,
-                Position = UDim2.new(0.071, 0, 0.82, 0),
-                Size = UDim2.new(0, 15, 0, 15),
+                Position = UDim2.new(0.075, 0, 0.8, 0),
+                Size = UDim2.new(0, 17, 0, 17),
             }, Header)
 
             new("TextLabel", {
                 Name = "ModuleName",
-                Font = Enum.Font.GothamBold,
+                Font = Enum.Font.GothamMedium,
                 TextColor3 = Theme.Text,
                 RichText = settings.rich == true,
                 Text = settings.rich and (settings.richtext or "") or (settings.title or "Module"),
-                Size = UDim2.new(0, 205, 0, 14),
+                Size = UDim2.new(0, 205, 0, 16),
                 AnchorPoint = Vector2.new(0, 0.5),
-                Position = UDim2.new(0.073, 0, 0.24, 0),
+                Position = UDim2.new(0.073, 0, 0.2, 0),
                 BackgroundTransparency = 1,
                 TextXAlignment = Enum.TextXAlignment.Left,
-                TextSize = 13,
+                TextSize = 14,
             }, Header)
 
             new("TextLabel", {
@@ -1068,17 +1295,18 @@ function Library:create_ui()
                 Text = settings.description or "",
                 Size = UDim2.new(0, 205, 0, 13),
                 AnchorPoint = Vector2.new(0, 0.5),
-                Position = UDim2.new(0.073, 0, 0.42, 0),
+                Position = UDim2.new(0.073, 0, 0.385, 0),
                 BackgroundTransparency = 1,
                 TextXAlignment = Enum.TextXAlignment.Left,
-                TextSize = 10,
+                TextSize = 11,
             }, Header)
 
             local Toggle = new("Frame", {
                 Name = "Toggle",
-                BackgroundColor3 = Theme.ToggleOff,
-                Position = UDim2.new(0.82, 0, 0.757, 0),
-                Size = UDim2.new(0, 25, 0, 12),
+                BackgroundColor3 = Theme.ToggleOffTrack,
+                AnchorPoint = Vector2.new(1, 0.5),
+                Position = UDim2.new(0.946, 0, 0.8, 0),
+                Size = UDim2.new(0, 36, 0, 19),
                 BorderSizePixel = 0,
             }, Header)
             new("UICorner", { CornerRadius = UDim.new(1, 0) }, Toggle)
@@ -1086,40 +1314,40 @@ function Library:create_ui()
             local Circle = new("Frame", {
                 Name = "Circle",
                 AnchorPoint = Vector2.new(0, 0.5),
-                Position = UDim2.new(0, 0, 0.5, 0),
-                Size = UDim2.new(0, 12, 0, 12),
+                Position = UDim2.new(0, 3, 0.5, 0),
+                Size = UDim2.new(0, 13, 0, 13),
                 BorderSizePixel = 0,
-                BackgroundColor3 = Theme.White,
+                BackgroundColor3 = Theme.ToggleOffKnob,
             }, Toggle)
             new("UICorner", { CornerRadius = UDim.new(1, 0) }, Circle)
-            new("UIStroke", { Color = Theme.Stroke, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, Circle)
 
+            -- Keybind chip ("None" until a key is assigned)
             local KeybindFrame = new("Frame", {
                 Name = "Keybind",
-                BackgroundColor3 = Theme.Accent,
-                BackgroundTransparency = 0.88,
-                Position = UDim2.new(0.15, 0, 0.735, 0),
-                Size = UDim2.new(0, 33, 0, 15),
+                AnchorPoint = Vector2.new(0, 0.5),
+                BackgroundColor3 = Theme.Item,
+                Position = UDim2.new(0, 48, 0.8, 0),
+                Size = UDim2.new(0, 42, 0, 22),
                 BorderSizePixel = 0,
             }, Header)
-            new("UICorner", { CornerRadius = UDim.new(0, 3) }, KeybindFrame)
+            new("UICorner", { CornerRadius = UDim.new(0, 6) }, KeybindFrame)
 
             local KeybindLabel = new("TextLabel", {
-                Font = Enum.Font.GothamSemibold,
-                TextColor3 = Theme.Accent,
+                Font = Enum.Font.GothamMedium,
+                TextColor3 = Theme.SubText,
                 Text = "None",
                 AnchorPoint = Vector2.new(0.5, 0.5),
-                Size = UDim2.new(0, 25, 0, 13),
+                Size = UDim2.new(0, 30, 0, 14),
                 BackgroundTransparency = 1,
                 Position = UDim2.new(0.5, 0, 0.5, 0),
-                TextSize = 10,
+                TextSize = 11,
             }, KeybindFrame)
 
             -- Divider lines inside the header
             new("Frame", {
                 Name = "Divider",
                 AnchorPoint = Vector2.new(0.5, 0),
-                Position = UDim2.new(0.5, 0, 0.62, 0),
+                Position = UDim2.new(0.5, 0, 0.575, 0),
                 Size = UDim2.new(0, 241, 0, 1),
                 BorderSizePixel = 0,
                 BackgroundColor3 = Theme.Stroke,
@@ -1229,8 +1457,11 @@ function Library:create_ui()
                 tween(Module, {
                     Size = state and UDim2.fromOffset(241, 93 + self._size + self._multiplier) or UDim2.fromOffset(241, 93),
                 })
-                tween(Toggle, { BackgroundColor3 = state and Theme.Accent or Theme.ToggleOff })
-                tween(Circle, { Position = state and UDim2.fromScale(0.53, 0.5) or UDim2.fromScale(0, 0.5) })
+                tween(Toggle, { BackgroundColor3 = state and Theme.ToggleOnTrack or Theme.ToggleOffTrack })
+                tween(Circle, {
+                    Position = state and UDim2.new(1, -16, 0.5, 0) or UDim2.new(0, 3, 0.5, 0),
+                    BackgroundColor3 = state and Theme.ToggleOnKnob or Theme.ToggleOffKnob,
+                })
 
                 if not settings.ignoresaved then
                     Library._config._flags[flag] = self._state
@@ -1243,8 +1474,9 @@ function Library:create_ui()
             -- Restore the saved state (unless the module opted out)
             if not settings.ignoresaved and Library._config._flags[flag] == true then
                 ModuleManager._state = true
-                Toggle.BackgroundColor3 = Theme.Accent
-                Circle.Position = UDim2.fromScale(0.53, 0.5)
+                Toggle.BackgroundColor3 = Theme.ToggleOnTrack
+                Circle.Position = UDim2.new(1, -16, 0.5, 0)
+                Circle.BackgroundColor3 = Theme.ToggleOnKnob
                 callback(true)
             end
 
@@ -1253,9 +1485,9 @@ function Library:create_ui()
             end, function(text)
                 text = text or "None"
                 KeybindLabel.Text = text
-                local width = text_size(text, 10, Enum.Font.GothamSemibold).X
-                KeybindFrame.Size = UDim2.fromOffset(math.max(width + 10, 33), 15)
-                KeybindLabel.Size = UDim2.fromOffset(width, 13)
+                local width = text_size(text, 11, Enum.Font.GothamMedium).X
+                KeybindFrame.Size = UDim2.fromOffset(math.max(width + 16, 42), 22)
+                KeybindLabel.Size = UDim2.fromOffset(width + 4, 14)
             end)
 
             Header.MouseButton1Click:Connect(function()
@@ -1449,37 +1681,34 @@ function Library:create_ui()
                 local check_flag = s.flag or s.title or "checkbox"
                 local check_callback = s.callback or function() end
                 local CheckboxManager = { _state = false }
-                local order = reserve(20)
+                local order = reserve(43)
 
                 local Checkbox = new("TextButton", {
                     Name = "Checkbox",
                     Text = "",
                     AutoButtonColor = false,
                     BackgroundTransparency = 1,
-                    Size = UDim2.new(0, 207, 0, 15),
+                    Size = UDim2.new(0, 207, 0, 38),
                     BorderSizePixel = 0,
                     LayoutOrder = order,
                 }, Options)
 
                 new("TextLabel", {
                     Name = "TitleLabel",
-                    Font = Enum.Font.GothamSemibold,
-                    TextSize = 11,
+                    Font = Enum.Font.GothamMedium,
+                    TextSize = 12,
                     TextColor3 = Theme.Text,
                     Text = s.title or "Checkbox",
-                    Size = UDim2.new(0, 142, 0, 13),
-                    AnchorPoint = Vector2.new(0, 0.5),
-                    Position = UDim2.new(0, 0, 0.5, 0),
+                    Size = UDim2.new(0, 150, 0, 14),
                     BackgroundTransparency = 1,
                     TextXAlignment = Enum.TextXAlignment.Left,
                 }, Checkbox)
 
                 local Box = new("Frame", {
                     Name = "Box",
-                    AnchorPoint = Vector2.new(1, 0.5),
+                    Position = UDim2.fromOffset(0, 22),
                     BackgroundColor3 = Theme.Item,
-                    Position = UDim2.new(1, 0, 0.5, 0),
-                    Size = UDim2.new(0, 15, 0, 15),
+                    Size = UDim2.new(0, 16, 0, 16),
                     BorderSizePixel = 0,
                 }, Checkbox)
                 new("UICorner", { CornerRadius = UDim.new(0, 4) }, Box)
@@ -1495,13 +1724,13 @@ function Library:create_ui()
                 }, Box)
                 new("UICorner", { CornerRadius = UDim.new(0, 3) }, Fill)
 
+                -- Keybind chip on the right (middle click to assign)
                 local KeybindBox = new("Frame", {
                     Name = "KeybindBox",
-                    AnchorPoint = Vector2.new(1, 0.5),
-                    Position = UDim2.new(1, -22, 0.5, 0),
-                    Size = UDim2.fromOffset(20, 14),
-                    BackgroundColor3 = Theme.Accent,
-                    BackgroundTransparency = 0.88,
+                    AnchorPoint = Vector2.new(1, 0),
+                    Position = UDim2.new(1, 0, 0, 0),
+                    Size = UDim2.fromOffset(22, 16),
+                    BackgroundColor3 = Theme.Item,
                     BorderSizePixel = 0,
                 }, Checkbox)
                 new("UICorner", { CornerRadius = UDim.new(0, 4) }, KeybindBox)
@@ -1509,8 +1738,8 @@ function Library:create_ui()
                 local KeybindText = new("TextLabel", {
                     Size = UDim2.new(1, 0, 1, 0),
                     BackgroundTransparency = 1,
-                    TextColor3 = Theme.Accent,
-                    Font = Enum.Font.GothamSemibold,
+                    TextColor3 = Theme.SubText,
+                    Font = Enum.Font.GothamMedium,
                     TextSize = 9,
                     Text = "...",
                 }, KeybindBox)
@@ -1518,8 +1747,7 @@ function Library:create_ui()
                 function CheckboxManager:change_state(state)
                     self._state = state
 
-                    tween(Box, { BackgroundColor3 = state and Theme.Item or Theme.Item })
-                    tween(Fill, { Size = state and UDim2.fromOffset(9, 9) or UDim2.fromOffset(0, 0) })
+                    tween(Fill, { Size = state and UDim2.fromOffset(10, 10) or UDim2.fromOffset(0, 0) })
 
                     if not s.ignoresaved then
                         Library._config._flags[check_flag] = self._state
@@ -1542,8 +1770,8 @@ function Library:create_ui()
                 end, function(text)
                     text = text or "..."
                     KeybindText.Text = text
-                    local width = text_size(text, 9, Enum.Font.GothamSemibold).X
-                    KeybindBox.Size = UDim2.fromOffset(math.max(width + 8, 20), 14)
+                    local width = text_size(text, 9, Enum.Font.GothamMedium).X
+                    KeybindBox.Size = UDim2.fromOffset(math.max(width + 10, 22), 16)
                 end)
 
                 return CheckboxManager
@@ -1611,21 +1839,21 @@ function Library:create_ui()
                 local slider_callback = s.callback or function() end
                 local min_value = s.minimum_value or 0
                 local max_value = s.maximum_value or 100
-                local order = reserve(27)
+                local order = reserve(31)
 
                 local Slider = new("TextButton", {
                     Name = "Slider",
                     Text = "",
                     AutoButtonColor = false,
                     BackgroundTransparency = 1,
-                    Size = UDim2.new(0, 207, 0, 22),
+                    Size = UDim2.new(0, 207, 0, 26),
                     BorderSizePixel = 0,
                     LayoutOrder = order,
                 }, Options)
 
                 new("TextLabel", {
-                    Font = Enum.Font.GothamSemibold,
-                    TextSize = 11,
+                    Font = Enum.Font.GothamMedium,
+                    TextSize = 12,
                     TextColor3 = Theme.Text,
                     Text = s.title or "Slider",
                     Size = UDim2.new(0, 153, 0, 13),
@@ -1636,23 +1864,23 @@ function Library:create_ui()
 
                 local Value = new("TextLabel", {
                     Name = "Value",
-                    Font = Enum.Font.GothamSemibold,
-                    TextColor3 = Theme.SubText,
+                    Font = Enum.Font.GothamMedium,
+                    TextColor3 = Theme.Text,
                     Text = "",
                     Size = UDim2.new(0, 42, 0, 13),
                     AnchorPoint = Vector2.new(1, 0),
                     Position = UDim2.new(1, 0, 0, 0),
                     BackgroundTransparency = 1,
                     TextXAlignment = Enum.TextXAlignment.Right,
-                    TextSize = 10,
+                    TextSize = 12,
                 }, Slider)
 
                 local Drag = new("Frame", {
                     Name = "Drag",
                     AnchorPoint = Vector2.new(0.5, 1),
-                    BackgroundColor3 = Theme.Stroke,
+                    BackgroundColor3 = Theme.Item,
                     Position = UDim2.new(0.5, 0, 0.95, 0),
-                    Size = UDim2.new(0, 207, 0, 4),
+                    Size = UDim2.new(0, 207, 0, 6),
                     BorderSizePixel = 0,
                 }, Slider)
                 new("UICorner", { CornerRadius = UDim.new(1, 0) }, Drag)
@@ -1661,22 +1889,22 @@ function Library:create_ui()
                     Name = "Fill",
                     AnchorPoint = Vector2.new(0, 0.5),
                     Position = UDim2.new(0, 0, 0.5, 0),
-                    Size = UDim2.new(0.5, 0, 0, 4),
+                    Size = UDim2.new(0.5, 0, 0, 6),
                     BorderSizePixel = 0,
-                    BackgroundColor3 = Theme.Accent,
+                    BackgroundColor3 = Color3.new(1, 1, 1),
                 }, Drag)
-                new("UICorner", { CornerRadius = UDim.new(0, 3) }, Fill)
+                new("UICorner", { CornerRadius = UDim.new(1, 0) }, Fill)
+                new("UIGradient", { Color = ColorSequence.new(Theme.GradA, Theme.GradB) }, Fill)
 
                 local Knob = new("Frame", {
                     Name = "Circle",
                     AnchorPoint = Vector2.new(0.5, 0.5),
                     Position = UDim2.new(1, 0, 0.5, 0),
-                    Size = UDim2.new(0, 10, 0, 10),
+                    Size = UDim2.new(0, 13, 0, 13),
                     BorderSizePixel = 0,
                     BackgroundColor3 = Theme.White,
                 }, Fill)
                 new("UICorner", { CornerRadius = UDim.new(1, 0) }, Knob)
-                new("UIStroke", { Color = Theme.Accent, Thickness = 1.5 }, Knob)
 
                 local function apply(value)
                     value = math.clamp(value, min_value, max_value)
@@ -1688,7 +1916,7 @@ function Library:create_ui()
 
                     local percentage = (max_value == min_value) and 0 or (value - min_value) / (max_value - min_value)
                     Value.Text = tostring(value)
-                    tween(Fill, { Size = UDim2.new(math.clamp(percentage, 0.02, 1), 0, 0, 4) }, 0.2)
+                    tween(Fill, { Size = UDim2.new(math.clamp(percentage, 0.02, 1), 0, 0, 6) }, 0.2)
 
                     if not s.ignoresaved then
                         Library._config._flags[slider_flag] = value
@@ -1748,7 +1976,7 @@ function Library:create_ui()
                 local multi = s.multi_dropdown == true
                 local options_list = s.options or {}
                 local max_visible = s.maximum_options or 6
-                local order = reserve(44)
+                local order = reserve(48)
 
                 local DropdownManager = { _state = false, _size = 0, _open_size = 0 }
 
@@ -1757,14 +1985,14 @@ function Library:create_ui()
                     Text = "",
                     AutoButtonColor = false,
                     BackgroundTransparency = 1,
-                    Size = UDim2.new(0, 207, 0, 39),
+                    Size = UDim2.new(0, 207, 0, 43),
                     BorderSizePixel = 0,
                     LayoutOrder = order,
                 }, Options)
 
                 local TitleLabel = new("TextLabel", {
-                    Font = Enum.Font.GothamSemibold,
-                    TextSize = 11,
+                    Font = Enum.Font.GothamMedium,
+                    TextSize = 12,
                     TextColor3 = Theme.Text,
                     Text = s.title or "Dropdown",
                     Size = UDim2.new(0, 207, 0, 13),
@@ -1778,16 +2006,17 @@ function Library:create_ui()
                     AnchorPoint = Vector2.new(0.5, 0),
                     BackgroundColor3 = Theme.Item,
                     Position = UDim2.new(0.5, 0, 1.2, 0),
-                    Size = UDim2.new(0, 207, 0, 22),
+                    Size = UDim2.new(0, 207, 0, 26),
                     BorderSizePixel = 0,
                 }, TitleLabel)
-                new("UICorner", { CornerRadius = UDim.new(0, 4) }, Box)
+                new("UICorner", { CornerRadius = UDim.new(0, 6) }, Box)
+                new("UIStroke", { Color = Theme.Stroke, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, Box)
                 new("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder }, Box)
 
                 local Header = new("Frame", {
                     Name = "Header",
                     BackgroundTransparency = 1,
-                    Size = UDim2.new(0, 207, 0, 22),
+                    Size = UDim2.new(0, 207, 0, 26),
                     BorderSizePixel = 0,
                     LayoutOrder = 1,
                 }, Box)
@@ -1802,7 +2031,7 @@ function Library:create_ui()
                     BackgroundTransparency = 1,
                     TextXAlignment = Enum.TextXAlignment.Left,
                     TextTruncate = Enum.TextTruncate.AtEnd,
-                    TextSize = 10,
+                    TextSize = 11,
                     Text = "None",
                 }, Header)
 
@@ -1938,8 +2167,8 @@ function Library:create_ui()
 
                     tween(Module, { Size = UDim2.fromOffset(241, 93 + ModuleManager._size + ModuleManager._multiplier) })
                     tween(Options, { Size = UDim2.fromOffset(241, ModuleManager._size + ModuleManager._multiplier) })
-                    tween(Dropdown, { Size = UDim2.fromOffset(207, 39 + self._open_size) })
-                    tween(Box, { Size = UDim2.fromOffset(207, 22 + self._open_size) })
+                    tween(Dropdown, { Size = UDim2.fromOffset(207, 43 + self._open_size) })
+                    tween(Box, { Size = UDim2.fromOffset(207, 26 + self._open_size) })
                     tween(Arrow, { Rotation = self._state and 180 or 0 })
                 end
 
@@ -2092,25 +2321,32 @@ function Library:create_ui()
                         Name = "ColorPickerPopup",
                         AnchorPoint = Vector2.new(0.5, 0.5),
                         Position = UDim2.new(0.5, 0, 0.5, 0),
-                        Size = UDim2.fromOffset(320, 304),
+                        Size = UDim2.fromOffset(300, 288),
                         BackgroundColor3 = Theme.Module,
                         BorderSizePixel = 0,
                         Active = true,
                         ZIndex = 50,
                     }, ScreenGui)
-                    new("UICorner", { CornerRadius = UDim.new(0, 12) }, Popup)
-                    new("UIStroke", { Color = Theme.Stroke, Thickness = 1.5, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, Popup)
+                    new("UICorner", { CornerRadius = UDim.new(0, 14) }, Popup)
+                    new("UIStroke", { Color = Theme.StrokeStrong, Thickness = 1.5, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, Popup)
                     -- Shrink on small screens
-                    new("UIScale", { Scale = math.clamp((viewport.X - 24) / 340, 0.55, 1) }, Popup)
+                    new("UIScale", { Scale = math.clamp((viewport.X - 24) / 320, 0.55, 1) }, Popup)
 
-                    -- Header
+                    -- Header (palette icon + title)
+                    new("TextLabel", {
+                        Text = "\240\159\142\168",
+                        TextSize = 16,
+                        Position = UDim2.fromOffset(15, 12),
+                        Size = UDim2.fromOffset(22, 24),
+                        BackgroundTransparency = 1,
+                    }, Popup)
                     new("TextLabel", {
                         Font = Enum.Font.GothamBold,
                         TextSize = 15,
                         TextColor3 = Theme.Text,
                         Text = "Color Picker",
-                        Position = UDim2.fromOffset(14, 14),
-                        Size = UDim2.fromOffset(200, 22),
+                        Position = UDim2.fromOffset(42, 12),
+                        Size = UDim2.fromOffset(200, 24),
                         BackgroundTransparency = 1,
                         TextXAlignment = Enum.TextXAlignment.Left,
                     }, Popup)
@@ -2122,7 +2358,7 @@ function Library:create_ui()
                         TextColor3 = Theme.SubText,
                         AutoButtonColor = false,
                         BackgroundColor3 = Theme.Item,
-                        Position = UDim2.fromOffset(280, 10),
+                        Position = UDim2.fromOffset(262, 8),
                         Size = UDim2.fromOffset(26, 26),
                         BorderSizePixel = 0,
                     }, Popup)
@@ -2131,13 +2367,13 @@ function Library:create_ui()
                     -- Saturation / value square
                     local SV = new("Frame", {
                         Name = "SV",
-                        Position = UDim2.fromOffset(14, 50),
-                        Size = UDim2.fromOffset(292, 130),
+                        Position = UDim2.fromOffset(15, 44),
+                        Size = UDim2.fromOffset(270, 124),
                         BackgroundColor3 = Color3.fromHSV(h, 1, 1),
                         BorderSizePixel = 0,
                         Active = true,
                     }, Popup)
-                    new("UICorner", { CornerRadius = UDim.new(0, 8) }, SV)
+                    new("UICorner", { CornerRadius = UDim.new(0, 10) }, SV)
 
                     -- White fades out to the right
                     local WhiteLayer = new("Frame", {
@@ -2145,7 +2381,7 @@ function Library:create_ui()
                         BackgroundColor3 = Color3.new(1, 1, 1),
                         BorderSizePixel = 0,
                     }, SV)
-                    new("UICorner", { CornerRadius = UDim.new(0, 8) }, WhiteLayer)
+                    new("UICorner", { CornerRadius = UDim.new(0, 10) }, WhiteLayer)
                     new("UIGradient", {
                         Transparency = NumberSequence.new({
                             NumberSequenceKeypoint.new(0, 0),
@@ -2159,7 +2395,7 @@ function Library:create_ui()
                         BackgroundColor3 = Color3.new(0, 0, 0),
                         BorderSizePixel = 0,
                     }, SV)
-                    new("UICorner", { CornerRadius = UDim.new(0, 8) }, BlackLayer)
+                    new("UICorner", { CornerRadius = UDim.new(0, 10) }, BlackLayer)
                     new("UIGradient", {
                         Rotation = 90,
                         Transparency = NumberSequence.new({
@@ -2181,8 +2417,8 @@ function Library:create_ui()
                     -- Hue bar
                     local Hue = new("Frame", {
                         Name = "Hue",
-                        Position = UDim2.fromOffset(14, 194),
-                        Size = UDim2.fromOffset(292, 14),
+                        Position = UDim2.fromOffset(15, 182),
+                        Size = UDim2.fromOffset(270, 16),
                         BackgroundColor3 = Color3.new(1, 1, 1),
                         BorderSizePixel = 0,
                         Active = true,
@@ -2202,7 +2438,7 @@ function Library:create_ui()
 
                     local HueKnob = new("Frame", {
                         AnchorPoint = Vector2.new(0.5, 0.5),
-                        Size = UDim2.fromOffset(8, 22),
+                        Size = UDim2.fromOffset(10, 26),
                         BackgroundColor3 = Color3.new(1, 1, 1),
                         BorderSizePixel = 0,
                         ZIndex = 3,
@@ -2221,29 +2457,44 @@ function Library:create_ui()
                         ClearTextOnFocus = false,
                         TextXAlignment = Enum.TextXAlignment.Left,
                         BackgroundColor3 = Theme.Item,
-                        Position = UDim2.fromOffset(14, 224),
-                        Size = UDim2.fromOffset(120, 30),
+                        Position = UDim2.fromOffset(15, 212),
+                        Size = UDim2.fromOffset(122, 28),
                         BorderSizePixel = 0,
                     }, Popup)
                     new("UICorner", { CornerRadius = UDim.new(0, 6) }, HexBox)
                     new("UIPadding", { PaddingLeft = UDim.new(0, 8) }, HexBox)
 
                     local CopyButton = new("TextButton", {
-                        Text = "Copy",
-                        Font = Enum.Font.GothamSemibold,
-                        TextSize = 11,
-                        TextColor3 = Theme.SubText,
+                        Text = "",
                         AutoButtonColor = false,
                         BackgroundColor3 = Theme.Item,
-                        Position = UDim2.fromOffset(138, 224),
-                        Size = UDim2.fromOffset(40, 30),
+                        Position = UDim2.fromOffset(141, 212),
+                        Size = UDim2.fromOffset(30, 28),
                         BorderSizePixel = 0,
                     }, Popup)
                     new("UICorner", { CornerRadius = UDim.new(0, 6) }, CopyButton)
 
+                    -- Copy icon: two overlapping squares
+                    local CopyBack = new("Frame", {
+                        Position = UDim2.fromOffset(10, 6),
+                        Size = UDim2.fromOffset(10, 10),
+                        BackgroundTransparency = 1,
+                        BorderSizePixel = 0,
+                    }, CopyButton)
+                    new("UICorner", { CornerRadius = UDim.new(0, 2) }, CopyBack)
+                    new("UIStroke", { Color = Theme.SubText, Thickness = 1.2 }, CopyBack)
+                    local CopyFront = new("Frame", {
+                        Position = UDim2.fromOffset(7, 10),
+                        Size = UDim2.fromOffset(10, 10),
+                        BackgroundColor3 = Theme.Item,
+                        BorderSizePixel = 0,
+                    }, CopyButton)
+                    new("UICorner", { CornerRadius = UDim.new(0, 2) }, CopyFront)
+                    new("UIStroke", { Color = Theme.SubText, Thickness = 1.2 }, CopyFront)
+
                     new("Frame", {
-                        Position = UDim2.fromOffset(186, 226),
-                        Size = UDim2.fromOffset(1, 26),
+                        Position = UDim2.fromOffset(180, 215),
+                        Size = UDim2.fromOffset(1, 22),
                         BackgroundColor3 = Theme.Stroke,
                         BorderSizePixel = 0,
                     }, Popup)
@@ -2256,8 +2507,8 @@ function Library:create_ui()
                         TextColor3 = Theme.Text,
                         AutoButtonColor = false,
                         BackgroundColor3 = Theme.Item,
-                        Position = UDim2.fromOffset(108, 266),
-                        Size = UDim2.fromOffset(90, 28),
+                        Position = UDim2.fromOffset(100, 251),
+                        Size = UDim2.fromOffset(86, 26),
                         BorderSizePixel = 0,
                     }, Popup)
                     new("UICorner", { CornerRadius = UDim.new(0, 6) }, Cancel)
@@ -2268,12 +2519,13 @@ function Library:create_ui()
                         TextSize = 12,
                         TextColor3 = Theme.White,
                         AutoButtonColor = false,
-                        BackgroundColor3 = Theme.Accent,
-                        Position = UDim2.fromOffset(206, 266),
-                        Size = UDim2.fromOffset(100, 28),
+                        BackgroundColor3 = Color3.new(1, 1, 1),
+                        Position = UDim2.fromOffset(196, 251),
+                        Size = UDim2.fromOffset(86, 26),
                         BorderSizePixel = 0,
                     }, Popup)
                     new("UICorner", { CornerRadius = UDim.new(0, 6) }, Confirm)
+                    new("UIGradient", { Color = ColorSequence.new(Theme.GradA, Theme.GradB) }, Confirm)
 
                     ---------------------------------------------------
                     -- Logic
@@ -2310,8 +2562,8 @@ function Library:create_ui()
                         local Dot = new("TextButton", {
                             Text = "",
                             AutoButtonColor = false,
-                            Position = UDim2.fromOffset(196 + (index - 1) * 22, 231),
-                            Size = UDim2.fromOffset(16, 16),
+                            Position = UDim2.fromOffset(194 + (index - 1) * 19, 218),
+                            Size = UDim2.fromOffset(14, 14),
                             BackgroundColor3 = preset_color,
                             BorderSizePixel = 0,
                         }, Popup)
