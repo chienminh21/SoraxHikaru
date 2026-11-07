@@ -1,6 +1,6 @@
 -- Custom settings 
 getgenv().GG = {
-    Theme = "Dark",
+    Theme = "Light",
     UIName = "Sora x Hikaru",
     FolderName = "SoraHikaru",
     GuiName = "SoraHikaru",
