@@ -1,215 +1,200 @@
-
+-- Custom settings (set BEFORE loading the UI)
 getgenv().GG = {
-    Theme = "Light",
-
-    UIName     = "Sora x Hikaru",
+    Theme = "Dark",
+    UIName = "Sora x Hikaru",
     FolderName = "SoraHikaru",
-    
-
-    Transparency = 0.25,
-    Watermark = false,
-
-    TextColor = Color3.fromRGB(30, 30, 40),
-    AccentColor = Color3.fromRGB(99, 102, 241),
-
-    GalacticText = true,
-    GalacticColor1 = Color3.fromRGB(99, 102, 241),
-    GalacticColor2 = Color3.fromRGB(236, 72, 153),
-    GalacticSpeed = 1.5,
+    GuiName = "SoraHikaru",
+    Transparency = 0.15,
+    Watermark = true,
+    ToggleKey = Enum.KeyCode.Insert,
 }
 
---  load UI 
+-- Load UI
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/chienminh21/SoraxHikaru/refs/heads/main/Lib/UI.lua"))()
 local main = Library.new()
 
--- create tabs 
-local combat_tab  = main:create_tab("Combat",  "rbxassetid://76499042599127")
-local utility_tab = main:create_tab("Utility", "rbxassetid://126017907477623")
-local config_tab  = main:create_tab("Config",  "rbxassetid://76499042599127")
+-- Tabs
+local tab1 = main:create_tab("Main", "rbxassetid://76499042599127")
+local tab2 = main:create_tab("Settings", "rbxassetid://126017907477623")
 
--- combat
-local Tab1 = combat_tab:create_module({
-    title = "Toggle left",
-    flag = "Toggle1",
-    description = "this is desc",
+-- MAIN TAB
+-- section = "left"  -> left column
+-- section = "right" -> right column
+
+-- LEFT
+local ToggleLeft = tab1:create_module({
+    title = "Toggle Left",
+    flag = "toggle_left",
+    description = "Left column module",
     section = "left",
     callback = function(value)
-        print("enabled:", value)
         Library.SendNotification({
-            title = "Aimbot",
-            text = value and "Enabled!" or "Disabled!",
-            duration = 3,
-            type = value and "success" or "info"
+            title = "Toggle Left",
+            text = value and "Enabled" or "Disabled",
+            duration = 3
         })
     end
 })
 
-Tab1:create_dropdown({
-    title = "dropdown left",
-    flag = "dropdownleft",
-    options = {"1", "2", "3"},
-    multi_dropdown = false,
-    maximum_options = 3,
-    callback = function(value)
-        print("Targeting:", value)
-    end
-})
-
-Tab1:create_slider({
-    title = "slider Left",
-    flag = "sliderleft",
+ToggleLeft:create_slider({
+    title = "Slider Left",
+    flag = "slider_left",
+    minimum_value = 0,
     maximum_value = 100,
-    minimum_value = 10,
     value = 50,
     round_number = true,
     callback = function(value)
-        print("Sensitivity:", value)
+        print("Slider Left:", value)
     end
 })
 
-Tab1:create_checkbox({
-    title = "check box",
-    flag = "checkbox1",
+ToggleLeft:create_dropdown({
+    title = "Dropdown Left",
+    flag = "dropdown_left",
+    options = {"Option 1", "Option 2", "Option 3"},
+    multi_dropdown = false,
+    maximum_options = 5,
     callback = function(value)
-        print("Checkbox:", value)
+        print("Dropdown Left:", value)
     end
 })
 
--- Range Slider (min - max)
-Tab1:create_range_slider({
-    title = "Range (Min-Max)",
-    flag = "range_combat",
+ToggleLeft:create_checkbox({
+    title = "Checkbox Left",
+    flag = "checkbox_left",
+    callback = function(value)
+        print("Checkbox Left:", value)
+    end
+})
+
+-- RIGHT
+local ToggleRight = tab1:create_module({
+    title = "Toggle Right",
+    flag = "toggle_right",
+    description = "Right column module",
+    section = "right",
+    callback = function(value)
+        Library.SendNotification({
+            title = "Toggle Right",
+            text = value and "Enabled" or "Disabled",
+            duration = 3
+        })
+    end
+})
+
+ToggleRight:create_range_slider({
+    title = "Range Slider",
+    flag = "range_slider",
     minimum_value = 0,
     maximum_value = 100,
     min_value = 20,
     max_value = 80,
     round_number = true,
     callback = function(min, max)
-        print("Range:", min, "-", max)
+        print("Range:", min, max)
     end
 })
 
-local Right = combat_tab:create_module({
-    title = "Toggle Right",
-    flag = "Toggle5",
-    description = "this is desc",
-    section = "right",
-    callback = function(value)
-        print("enabled:", value)
-        Library.SendNotification({
-            title = "Right",
-            text = value and "Enabled!" or "Disabled!",
-            duration = 3
-        })
-    end
-})
-
-Right:create_button({
-    title = "Test Button",
-    callback = function()
-        Library.Notify.Success("Button", "Bạn vừa bấm nút!", 3)
-    end
-})
-
-Right:create_colorpicker({
-    title = "Aim Color",
-    flag = "aim_color",
-    default = Color3.fromRGB(255, 100, 100),
-    callback = function(color)
-        print("Aim Color:", color)
-    end
-})
-
--- utility
-local ToggleLeft = utility_tab:create_module({
-    title = "Toggle",
-    flag = "util_toggle",
-    description = "just toggle",
-    section = "left",
-    callback = function(value)
-        print("Speed Hack:", value)
-    end
-})
-
-local Toggleright = utility_tab:create_module({
-    title = "Toggle and input",
-    flag = "util_input_mod",
-    description = "description hello",
-    section = "right",
-    callback = function(value)
-        print("Speed Hack:", value)
-    end
-})
-
-Toggleright:create_paragraph({
-    title = "Info",
-    text = "hello this is info"
-})
-
-Toggleright:create_textbox({
-    title = "input",
-    placeholder = "Enter...",
-    flag = "input_text",
+ToggleRight:create_textbox({
+    title = "Textbox",
+    placeholder = "Enter text...",
+    flag = "textbox_right",
     callback = function(text)
-        print("set to:", text)
+        print("Textbox:", text)
     end
 })
 
-Toggleright:create_slider({
-    title = "slider Value",
-    flag = "slider_value",
-    minimum_value = 1,
-    maximum_value = 200,
-    value = 50,
-    round_number = true,
-    callback = function(v)
-        print("slider:", v)
-    end
-})
-
-Toggleright:create_colorpicker({
-    title = " Color",
-    flag = "picker_color",
-    default = Color3.fromRGB(255, 100, 100),
+ToggleRight:create_colorpicker({
+    title = "Color Picker",
+    flag = "color_right",
+    default = Color3.fromRGB(99, 102, 241),
     callback = function(color)
-        print("picker Color:", color)
+        print("Color:", color)
     end
 })
 
--- config tab
-local ConfigMod = config_tab:create_module({
-    title = "Config Manager",
-    flag = "config_mod",
-    description = "Save / Load / Reset config",
+ToggleRight:create_button({
+    title = "Button",
+    callback = function()
+        Library.Notify.Success("Button", "Clicked", 2)
+    end
+})
+
+-- SETTINGS TAB
+
+-- LEFT
+local SettingsLeft = tab2:create_module({
+    title = "UI Settings",
+    flag = "ui_settings",
+    description = "Left column",
     section = "left",
     callback = function() end
 })
 
-ConfigMod:create_button({
+SettingsLeft:create_dropdown({
+    title = "Theme",
+    flag = "theme_mode",
+    options = {"Dark", "Light"},
+    multi_dropdown = false,
+    maximum_options = 2,
+    callback = function(value)
+        if Library.SetTheme then Library.SetTheme(value) else print("Theme:", value) end
+    end
+})
+
+SettingsLeft:create_slider({
+    title = "UI Transparency",
+    flag = "ui_transparency",
+    minimum_value = 0,
+    maximum_value = 0.9,
+    value = 0.15,
+    round_number = false,
+    callback = function(value)
+        if Library.SetTransparency then Library.SetTransparency(value) else print("Transparency:", value) end
+    end
+})
+
+SettingsLeft:create_paragraph({
+    title = "Info",
+    text = "0 = solid, 0.9 = very clear"
+})
+
+-- RIGHT
+local ConfigRight = tab2:create_module({
+    title = "Config",
+    flag = "config_mod",
+    description = "Right column",
+    section = "right",
+    callback = function() end
+})
+
+ConfigRight:create_button({
     title = "Save Config",
     callback = function()
         Library.SaveConfig()
     end
 })
 
-ConfigMod:create_button({
+ConfigRight:create_button({
     title = "Load Config",
     callback = function()
         Library.LoadConfig()
     end
 })
 
-ConfigMod:create_button({
+ConfigRight:create_button({
     title = "Reset Config",
     callback = function()
         Library.ResetConfig()
     end
 })
 
-ConfigMod:create_paragraph({
-    title = "info",
-    text = "hello this is config"
+ConfigRight:create_button({
+    title = "Export Config",
+    callback = function()
+        Library.ExportConfig()
+    end
 })
 
--- loader ui
+-- Load UI
 main:load()
