@@ -486,18 +486,18 @@ local Library = {
 Library.__index = Library
 Library.SetTheme = Library_SetTheme
 
--- ===================== Config Manager =====================
+-- Config Manager 
 function Library.SaveConfig()
     Config:save(game.GameId, Library._config)
     if Library.Notify then
-        Library.Notify.Success("Config", "Đã lưu config", 3)
+        Library.Notify.Success("Config", "Save config", 3)
     end
 end
 
 function Library.LoadConfig()
     Library._config = Config:load(game.GameId)
     if Library.Notify then
-        Library.Notify.Info("Config", "Đã load config (mở lại UI để áp dụng đầy đủ)", 4)
+        Library.Notify.Info("Config", " load config (Reopen UI to fully apply)", 4)
     end
     return Library._config
 end
@@ -510,7 +510,7 @@ function Library.ResetConfig()
     }
     Config:save(game.GameId, Library._config)
     if Library.Notify then
-        Library.Notify.Warn("Config", "Đã reset config về mặc định", 3)
+        Library.Notify.Warn("Config", " reset config ", 3)
     end
 end
 
@@ -522,17 +522,17 @@ function Library.ExportConfig()
         if setclipboard then
             pcall(setclipboard, encoded)
             if Library.Notify then
-                Library.Notify.Success("Config", "Đã copy config vào clipboard", 3)
+                Library.Notify.Success("Config", "did copy config in clipboard", 3)
             end
         else
             if Library.Notify then
-                Library.Notify.Info("Config", "Export OK (không có setclipboard)", 3)
+                Library.Notify.Info("Config", "Export OK (no copy in setclipboard)", 3)
             end
         end
         return encoded
     end
     if Library.Notify then
-        Library.Notify.Error("Config", "Export thất bại", 3)
+        Library.Notify.Error("Config", "Export wrong", 3)
     end
     return nil
 end
@@ -540,7 +540,7 @@ end
 function Library.ImportConfig(jsonString)
     if not jsonString or jsonString == "" then
         if Library.Notify then
-            Library.Notify.Error("Config", "Chuỗi config trống", 3)
+            Library.Notify.Error("Config", "nothing config ", 3)
         end
         return false
     end
@@ -556,7 +556,7 @@ function Library.ImportConfig(jsonString)
         return true
     end
     if Library.Notify then
-        Library.Notify.Error("Config", "Import thất bại - JSON sai", 3)
+        Library.Notify.Error("Config", "Import wrong - JSON wrong", 3)
     end
     return false
 end
@@ -583,11 +583,11 @@ function Library.ClearAllKeybinds()
     Library._config._keybinds = {}
     Config:save(game.GameId, Library._config)
     if Library.Notify then
-        Library.Notify.Warn("Keybinds", "Đã xóa tất cả keybind", 3)
+        Library.Notify.Warn("Keybinds", "del keybind", 3)
     end
 end
 
--- ===================== Watermark =====================
+-- Watermark
 function Library.CreateWatermark(text)
     if getgenv().SxH_Watermark then
         pcall(function() getgenv().SxH_Watermark:Destroy() end)
@@ -666,7 +666,7 @@ function Library.new()
     return self
 end
 
--- ===================== Sora x Hikaru Notification =====================
+--  Notification 
 local Notify = {}
 local MAX_VISIBLE = 5
 local active = {}
@@ -678,7 +678,7 @@ local function getNotifyParent()
     return (ok and ui) or CoreGui
 end
 
--- gỡ bản cũ
+-- 
 if getgenv().SxH_Notify then
     pcall(function() getgenv().SxH_Notify.Destroy() end)
 end
@@ -906,7 +906,7 @@ end
 
 getgenv().SxH_Notify = Notify
 
--- Tương thích với code cũ
+-- 
 function Library.SendNotification(settings)
     return Notify.Send(settings)
 end
@@ -1050,7 +1050,7 @@ function Library:create_ui()
         }
         UIGradient.Parent = ClientName
 
-        -- Chạy gradient liên tục
+        --  gradient loop
         task.spawn(function()
             local offset = 0
             while ClientName and ClientName.Parent do
@@ -1124,7 +1124,7 @@ function Library:create_ui()
     UIScale.Parent = Container    
     
     self._ui = MainGui
-    Library._ui = MainGui  -- để colorpicker / popup dùng được
+    Library._ui = MainGui  --  colorpicker 
 
     local function on_drag(input: InputObject, process: boolean)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then 
@@ -1244,7 +1244,7 @@ function Library:create_ui()
 
         AcrylicBlur.new(Container)
 
-        -- Watermark (mặc định bật, tắt bằng GG.Watermark = false)
+        -- Watermark 
         if GG.Watermark ~= false then
             Library.CreateWatermark(UI_NAME)
         end
