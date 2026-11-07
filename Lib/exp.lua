@@ -1,17 +1,4 @@
 
---[[
-    Sora x Hikaru | Example.lua
-    A complete example of the UI library.
-
-    Copy the parts you need into your own game script.
-]]
-
---[[
-    1. Options
-
-    Set GG before loading the library.
-    Every option is optional.
-]]
 
 getgenv().GG = {
     UIName = "Sora x Hikaru",
