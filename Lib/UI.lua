@@ -3340,15 +3340,14 @@ function Library:create_ui()
                 pStroke.Transparency = 0.3
                 pStroke.Parent = preview
 
-                -- Popup
+                -- Popup (parent ra ngoài để không bị ClipsDescendants cắt)
                 local popup = Instance.new("Frame")
                 popup.Size = UDim2.new(0, 160, 0, 130)
-                popup.Position = UDim2.new(1, 8, 0, 0)
                 popup.BackgroundColor3 = CurrentTheme.Card or CurrentTheme.BackgroundSecondary
                 popup.BackgroundTransparency = 0.05
                 popup.Visible = false
-                popup.ZIndex = 50
-                popup.Parent = holder
+                popup.ZIndex = 100
+                popup.Parent = Library._ui or CoreGui  -- hiện trên UI, không bị cắt trong module
 
                 local popCorner = Instance.new("UICorner")
                 popCorner.CornerRadius = UDim.new(0, 8)
@@ -3455,19 +3454,28 @@ function Library:create_ui()
                 bindBar(bBar, function(v) b = v end)
 
                 preview.MouseButton1Click:Connect(function()
-                    popup.Visible = not popup.Visible
+                    if popup.Visible then
+                        popup.Visible = false
+                        return
+                    end
+                    -- đặt popup cạnh ô màu (không bị menu cắt)
+                    local abs = preview.AbsolutePosition
+                    local size = preview.AbsoluteSize
+                    popup.Position = UDim2.fromOffset(abs.X + size.X + 8, abs.Y)
+                    popup.Visible = true
                 end)
 
-                -- click ra ngoài thì đóng (đơn giản)
+                -- click ra ngoài thì đóng
                 UserInputService.InputBegan:Connect(function(input)
                     if not popup.Visible then return end
                     if input.UserInputType == Enum.UserInputType.MouseButton1 then
                         local pos = input.Position
-                        local abs = popup.AbsolutePosition
-                        local size = popup.AbsoluteSize
-                        local inPopup = pos.X >= abs.X and pos.X <= abs.X + size.X and pos.Y >= abs.Y and pos.Y <= abs.Y + size.Y
-                        local inPreview = pos.X >= preview.AbsolutePosition.X and pos.X <= preview.AbsolutePosition.X + preview.AbsoluteSize.X
-                            and pos.Y >= preview.AbsolutePosition.Y and pos.Y <= preview.AbsolutePosition.Y + preview.AbsoluteSize.Y
+                        local pAbs = popup.AbsolutePosition
+                        local pSize = popup.AbsoluteSize
+                        local inPopup = pos.X >= pAbs.X and pos.X <= pAbs.X + pSize.X and pos.Y >= pAbs.Y and pos.Y <= pAbs.Y + pSize.Y
+                        local pr = preview.AbsolutePosition
+                        local ps = preview.AbsoluteSize
+                        local inPreview = pos.X >= pr.X and pos.X <= pr.X + ps.X and pos.Y >= pr.Y and pos.Y <= pr.Y + ps.Y
                         if not inPopup and not inPreview then
                             popup.Visible = false
                         end
