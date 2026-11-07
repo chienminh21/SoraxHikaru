@@ -1,13 +1,13 @@
--- ===================== CUSTOM (viết TRƯỚC khi load UI) =====================
+
 getgenv().GG = {
     Theme = "Light",
 
     UIName     = "Sora x Hikaru",
     FolderName = "SoraHikaru",
-    GuiName    = "SoraHikaru",
+    
 
     Transparency = 0.25,
-    Watermark = true,
+    Watermark = false,
 
     TextColor = Color3.fromRGB(30, 30, 40),
     AccentColor = Color3.fromRGB(99, 102, 241),
@@ -18,16 +18,16 @@ getgenv().GG = {
     GalacticSpeed = 1.5,
 }
 
--- ===================== LOAD UI =====================
+--  load UI 
 local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/chienminh21/SoraxHikaru/refs/heads/main/Lib/UI.lua"))()
 local main = Library.new()
 
--- ===================== TABS =====================
+-- create tabs 
 local combat_tab  = main:create_tab("Combat",  "rbxassetid://76499042599127")
 local utility_tab = main:create_tab("Utility", "rbxassetid://126017907477623")
 local config_tab  = main:create_tab("Config",  "rbxassetid://76499042599127")
 
--- ===================== COMBAT =====================
+-- combat
 local Tab1 = combat_tab:create_module({
     title = "Toggle left",
     flag = "Toggle1",
@@ -71,7 +71,7 @@ Tab1:create_checkbox({
     title = "check box",
     flag = "checkbox1",
     callback = function(value)
-        print("Silent Aim:", value)
+        print("Checkbox:", value)
     end
 })
 
@@ -120,11 +120,11 @@ Right:create_colorpicker({
     end
 })
 
--- ===================== UTILITY =====================
+-- utility
 local ToggleLeft = utility_tab:create_module({
     title = "Toggle",
     flag = "util_toggle",
-    description = "just Toggle no slider",
+    description = "just toggle",
     section = "left",
     callback = function(value)
         print("Speed Hack:", value)
@@ -134,7 +134,7 @@ local ToggleLeft = utility_tab:create_module({
 local Toggleright = utility_tab:create_module({
     title = "Toggle and input",
     flag = "util_input_mod",
-    description = "Increases player speed",
+    description = "description hello",
     section = "right",
     callback = function(value)
         print("Speed Hack:", value)
@@ -156,27 +156,27 @@ Toggleright:create_textbox({
 })
 
 Toggleright:create_slider({
-    title = "Speed Value",
-    flag = "speed_value",
+    title = "slider Value",
+    flag = "slider_value",
     minimum_value = 1,
     maximum_value = 200,
     value = 50,
     round_number = true,
     callback = function(v)
-        print("Speed:", v)
+        print("slider:", v)
     end
 })
 
 Toggleright:create_colorpicker({
-    title = "ESP Color",
-    flag = "esp_color",
+    title = " Color",
+    flag = "picker_color",
     default = Color3.fromRGB(255, 100, 100),
     callback = function(color)
-        print("ESP Color:", color)
+        print("picker Color:", color)
     end
 })
 
--- ===================== CONFIG TAB =====================
+-- config tab
 local ConfigMod = config_tab:create_module({
     title = "Config Manager",
     flag = "config_mod",
@@ -207,9 +207,9 @@ ConfigMod:create_button({
 })
 
 ConfigMod:create_paragraph({
-    title = "Hướng dẫn",
-    text = "Config tự lưu khi bật tắt toggle/slider. Bấm Save để lưu tay, Reset để xóa hết."
+    title = "info",
+    text = "hello this is config"
 })
 
--- ===================== LOAD UI =====================
+-- loader ui
 main:load()
