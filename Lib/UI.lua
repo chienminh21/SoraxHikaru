@@ -1048,6 +1048,7 @@ function Library:create_ui()
     UIScale.Parent = Container    
     
     self._ui = MainGui
+    Library._ui = MainGui  -- để colorpicker / popup dùng được
 
     local function on_drag(input: InputObject, process: boolean)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then 
@@ -3346,8 +3347,20 @@ function Library:create_ui()
                 popup.BackgroundColor3 = CurrentTheme.Card or CurrentTheme.BackgroundSecondary
                 popup.BackgroundTransparency = 0.05
                 popup.Visible = false
-                popup.ZIndex = 100
-                popup.Parent = Library._ui or CoreGui  -- hiện trên UI, không bị cắt trong module
+                popup.ZIndex = 200
+
+                -- ScreenGui riêng để popup luôn nổi trên cùng, không bị cắt
+                local popupGui = Instance.new("ScreenGui")
+                popupGui.Name = "SxH_ColorPopup"
+                popupGui.ResetOnSpawn = false
+                popupGui.IgnoreGuiInset = true
+                popupGui.DisplayOrder = 1000
+                popupGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+                pcall(function()
+                    popupGui.Parent = (gethui and gethui()) or CoreGui
+                end)
+                if not popupGui.Parent then popupGui.Parent = CoreGui end
+                popup.Parent = popupGui
 
                 local popCorner = Instance.new("UICorner")
                 popCorner.CornerRadius = UDim.new(0, 8)
