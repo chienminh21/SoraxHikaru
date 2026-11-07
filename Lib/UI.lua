@@ -1,51 +1,24 @@
---[[
-    ====================== CUSTOM ======================
-    Viết ở ngoài trước khi load UI:
-
-    getgenv().GG = {
-        Theme = "Light",                    -- "Light" | "Dark"
-        SelectedLanguage = "en",
-
-        -- Custom màu chữ
-        TextColor = Color3.fromRGB(30, 30, 40),          -- chữ chính
-        TextSecondaryColor = Color3.fromRGB(90, 90, 110), -- chữ phụ
-
-        -- Custom accent
-        AccentColor = Color3.fromRGB(99, 102, 241),
-
-        -- Galactic Text (chữ hiệu ứng)
-        GalacticText = true,                -- bật/tắt
-        GalacticColor1 = Color3.fromRGB(99, 102, 241),   -- màu 1
-        GalacticColor2 = Color3.fromRGB(236, 72, 153),   -- màu 2 (hồng)
-        GalacticSpeed = 1.5,                -- tốc độ chạy gradient
-    }
-    ====================================================
-]]
-
 getgenv().GG = getgenv().GG or {}
 
--- Default values
+-- Defaults (có thể ghi đè bằng getgenv().GG trước khi load)
 GG.SelectedLanguage = GG.SelectedLanguage or "en"
-GG.Theme = GG.Theme or "Light"
-
--- Tên & Folder (viết ngoài được)
-GG.UIName     = GG.UIName     or "Sora x Hikaru"   -- chữ hiện trên UI
-GG.FolderName = GG.FolderName or "SoraHikaru"      -- folder lưu config
-GG.GuiName    = GG.GuiName    or "SoraHikaru"      -- tên ScreenGui
-
-GG.Transparency = GG.Transparency or 0.25          -- 0 = đục, 1 = trong suốt hoàn toàn
-GG.Watermark = GG.Watermark ~= false               -- watermark góc màn hình
+GG.Theme = GG.Theme or "Dark"
+GG.UIName = GG.UIName or "Sora x Hikaru"
+GG.FolderName = GG.FolderName or "SoraHikaru"
+GG.GuiName = GG.GuiName or "SoraHikaru"
+GG.Transparency = GG.Transparency or 0.15
+GG.Watermark = GG.Watermark ~= false
 GG.TextColor = GG.TextColor or nil
 GG.TextSecondaryColor = GG.TextSecondaryColor or nil
 GG.AccentColor = GG.AccentColor or nil
-GG.GalacticText = GG.GalacticText ~= false          -- mặc định bật
+GG.GalacticText = GG.GalacticText ~= false
 GG.GalacticColor1 = GG.GalacticColor1 or Color3.fromRGB(99, 102, 241)
 GG.GalacticColor2 = GG.GalacticColor2 or Color3.fromRGB(236, 72, 153)
 GG.GalacticSpeed = GG.GalacticSpeed or 1.5
 
-local UI_NAME     = GG.UIName
+local UI_NAME = GG.UIName
 local FOLDER_NAME = GG.FolderName
-local GUI_NAME    = GG.GuiName
+local GUI_NAME = GG.GuiName
 
 GG.Language = GG.Language or {
     CheckboxEnabled = "Enabled",
@@ -966,54 +939,6 @@ function Library:create_ui()
     Icon.BorderSizePixel = 0
     Icon.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     Icon.Parent = Handler
-
-    -- ===================== Search Bar =====================
-    local SearchContainer = Instance.new("Frame")
-    SearchContainer.Name = "SearchContainer"
-    SearchContainer.Size = UDim2.new(0, 240, 0, 26)
-    SearchContainer.Position = UDim2.new(0, 175, 0, 8)  -- đẩy lên cao hơn
-    SearchContainer.BackgroundColor3 = CurrentTheme.Card or CurrentTheme.BackgroundSecondary
-    SearchContainer.BackgroundTransparency = 0.15
-    SearchContainer.BorderSizePixel = 0
-    SearchContainer.Parent = Handler
-
-    local SearchCorner = Instance.new("UICorner")
-    SearchCorner.CornerRadius = UDim.new(0, 8)
-    SearchCorner.Parent = SearchContainer
-
-    local SearchStroke = Instance.new("UIStroke")
-    SearchStroke.Color = CurrentTheme.Stroke
-    SearchStroke.Transparency = 0.4
-    SearchStroke.Parent = SearchContainer
-
-    local SearchBox = Instance.new("TextBox")
-    SearchBox.Size = UDim2.new(1, -12, 1, 0)
-    SearchBox.Position = UDim2.new(0, 10, 0, 0)
-    SearchBox.BackgroundTransparency = 1
-    SearchBox.PlaceholderText = "Search modules..."
-    SearchBox.PlaceholderColor3 = CurrentTheme.TextSecondary
-    SearchBox.TextColor3 = CurrentTheme.TextPrimary
-    SearchBox.Font = Enum.Font.Gotham
-    SearchBox.TextSize = 12
-    SearchBox.TextXAlignment = Enum.TextXAlignment.Left
-    SearchBox.ClearTextOnFocus = false
-    SearchBox.Text = ""
-    SearchBox.Parent = SearchContainer
-
-    local function FilterModules(text)
-        text = string.lower(text or "")
-        for _, data in ipairs(Library._all_modules) do
-            if text == "" or string.find(data.title, text, 1, true) then
-                data.frame.Visible = true
-            else
-                data.frame.Visible = false
-            end
-        end
-    end
-
-    SearchBox:GetPropertyChangedSignal("Text"):Connect(function()
-        FilterModules(SearchBox.Text)
-    end)
     
     local Divider = Instance.new('Frame')
     Divider.Name = 'Divider'
@@ -3505,7 +3430,7 @@ function Library:create_ui()
 
                 -- Hex label
                 local hexLabel = Instance.new("TextLabel")
-                hexLabel.Size = UDim2.new(1, -24, 0, 16)
+                hexLabel.Size = UDim2.new(1, -48, 0, 16)
                 hexLabel.Position = UDim2.new(0, 12, 0, 154)
                 hexLabel.BackgroundTransparency = 1
                 hexLabel.Font = Enum.Font.Gotham
@@ -3514,6 +3439,24 @@ function Library:create_ui()
                 hexLabel.TextXAlignment = Enum.TextXAlignment.Left
                 hexLabel.ZIndex = 201
                 hexLabel.Parent = popup
+
+                -- Nút X đóng popup
+                local closeBtn = Instance.new("TextButton")
+                closeBtn.Size = UDim2.new(0, 22, 0, 22)
+                closeBtn.Position = UDim2.new(1, -30, 0, 6)
+                closeBtn.BackgroundColor3 = Color3.fromRGB(40, 42, 52)
+                closeBtn.BackgroundTransparency = 0.2
+                closeBtn.Text = "×"
+                closeBtn.Font = Enum.Font.GothamBold
+                closeBtn.TextSize = 16
+                closeBtn.TextColor3 = Color3.fromRGB(220, 220, 230)
+                closeBtn.AutoButtonColor = false
+                closeBtn.ZIndex = 210
+                closeBtn.Parent = popup
+
+                local closeCorner = Instance.new("UICorner")
+                closeCorner.CornerRadius = UDim.new(0, 6)
+                closeCorner.Parent = closeBtn
 
                 local function toHex(color)
                     return string.format("#%02X%02X%02X",
@@ -3591,6 +3534,21 @@ function Library:create_ui()
                     popup.Visible = false
                     arrow.Text = "▾"
                 end
+
+                closeBtn.MouseButton1Click:Connect(closePopup)
+
+                closeBtn.MouseEnter:Connect(function()
+                    TweenService:Create(closeBtn, TweenInfo.new(0.15), {
+                        BackgroundColor3 = Color3.fromRGB(220, 60, 70),
+                        TextColor3 = Color3.fromRGB(255, 255, 255)
+                    }):Play()
+                end)
+                closeBtn.MouseLeave:Connect(function()
+                    TweenService:Create(closeBtn, TweenInfo.new(0.15), {
+                        BackgroundColor3 = Color3.fromRGB(40, 42, 52),
+                        TextColor3 = Color3.fromRGB(220, 220, 230)
+                    }):Play()
+                end)
 
                 preview.MouseButton1Click:Connect(function()
                     if popup.Visible then closePopup() else openPopup() end
