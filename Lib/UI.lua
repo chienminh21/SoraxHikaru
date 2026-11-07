@@ -433,117 +433,252 @@ function Library.new()
     return self
 end
 
--- Create Notification Container
-local NotificationContainer = Instance.new("Frame")
-NotificationContainer.Name = "RobloxCoreGuis"
-NotificationContainer.Size = UDim2.new(0, 300, 0, 0)  -- Fixed width (300px), dynamic height (Y)
-NotificationContainer.Position = UDim2.new(0.8, 0, 0, 10)  -- Right side, offset by 10 from top
-NotificationContainer.BackgroundTransparency = 1
-NotificationContainer.ClipsDescendants = false;
-NotificationContainer.Parent = game:GetService("CoreGui").RobloxGui:FindFirstChild("RobloxCoreGuis") or Instance.new("ScreenGui", game:GetService("CoreGui").RobloxGui)
-NotificationContainer.AutomaticSize = Enum.AutomaticSize.Y
+-- ===================== Sora x Hikaru Notification =====================
+local Notify = {}
+local MAX_VISIBLE = 5
+local active = {}
+local order = 0
+local notifyConnections = {}
 
--- UIListLayout to arrange notifications vertically
-local UIListLayout = Instance.new("UIListLayout")
-UIListLayout.FillDirection = Enum.FillDirection.Vertical
-UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-UIListLayout.Padding = UDim.new(0, 10)
-UIListLayout.Parent = NotificationContainer
-
--- Function to create notifications
-function Library.SendNotification(settings)
-    -- Create the notification frame (this will be managed by UIListLayout)
-    local Notification = Instance.new("Frame")
-    Notification.Size = UDim2.new(1, 0, 0, 60)  -- Width = 100% of NotificationContainer's width, dynamic height (Y)
-    Notification.BackgroundTransparency = 1  -- Outer frame is transparent for layout to work
-    Notification.BorderSizePixel = 0
-    Notification.Name = "Notification"
-    Notification.Parent = NotificationContainer  -- Parent it to your NotificationContainer (the parent of the list layout)
-    Notification.AutomaticSize = Enum.AutomaticSize.Y  -- Allow this frame to resize based on child height
-
-    -- Add rounded corners to outer frame
-    local UICorner = Instance.new("UICorner")
-    UICorner.CornerRadius = UDim.new(0, 4)
-    UICorner.Parent = Notification
-
-    -- Create the inner frame for the notification's content
-    local InnerFrame = Instance.new("Frame")
-    InnerFrame.Size = UDim2.new(1, 0, 0, 60)  -- Start with an initial height, width will adapt
-    InnerFrame.Position = UDim2.new(0, 0, 0, 0)  -- Positioned inside the outer notification frame
-    InnerFrame.BackgroundColor3 = CurrentTheme.Card
-    InnerFrame.BackgroundTransparency = 0.1
-    InnerFrame.BorderSizePixel = 0
-    InnerFrame.Name = "InnerFrame"
-    InnerFrame.Parent = Notification
-    InnerFrame.AutomaticSize = Enum.AutomaticSize.Y  -- Automatically resize based on its content
-
-    -- Add rounded corners to the inner frame
-    local InnerUICorner = Instance.new("UICorner")
-    InnerUICorner.CornerRadius = UDim.new(0, 4)
-    InnerUICorner.Parent = InnerFrame
-
-    -- Title Label (with automatic size support)
-    local Title = Instance.new("TextLabel")
-    Title.Text = settings.title or "Notification Title"
-    Title.TextColor3 = CurrentTheme.TextPrimary
-    Title.FontFace = Font.new('rbxasset://fonts/families/GothamSSm.json', Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
-    Title.TextSize = 14
-    Title.Size = UDim2.new(1, -10, 0, 20)  -- Width is 1 (100% of parent width), height is fixed initially
-    Title.Position = UDim2.new(0, 5, 0, 5)
-    Title.BackgroundTransparency = 1
-    Title.TextXAlignment = Enum.TextXAlignment.Left
-    Title.TextYAlignment = Enum.TextYAlignment.Center
-    Title.TextWrapped = true  -- Enable wrapping
-    Title.AutomaticSize = Enum.AutomaticSize.Y  -- Allow the title to resize based on content
-    Title.Parent = InnerFrame
-
-    -- Body Text (with automatic size support)
-    local Body = Instance.new("TextLabel")
-    Body.Text = settings.text or "This is the body of the notification."
-    Body.TextColor3 = CurrentTheme.TextSecondary
-    Body.FontFace = Font.new('rbxasset://fonts/families/GothamSSm.json', Enum.FontWeight.Regular, Enum.FontStyle.Normal)
-    Body.TextSize = 12
-    Body.Size = UDim2.new(1, -10, 0, 30)  -- Width is 1 (100% of parent width), height is fixed initially
-    Body.Position = UDim2.new(0, 5, 0, 25)
-    Body.BackgroundTransparency = 1
-    Body.TextXAlignment = Enum.TextXAlignment.Left
-    Body.TextYAlignment = Enum.TextYAlignment.Top
-    Body.TextWrapped = true  -- Enable wrapping for long text
-    Body.AutomaticSize = Enum.AutomaticSize.Y  -- Allow the body text to resize based on content
-    Body.Parent = InnerFrame
-
-    -- Force the size to adjust after the text is fully loaded and wrapped
-    task.spawn(function()
-        wait(0.1)  -- Allow text wrapping to finish
-        -- Adjust inner frame size based on content
-        local totalHeight = Title.TextBounds.Y + Body.TextBounds.Y + 10  -- Add padding
-        InnerFrame.Size = UDim2.new(1, 0, 0, totalHeight)  -- Resize the inner frame
-    end)
-
-    -- Use task.spawn to ensure the notification tweening happens asynchronously
-    task.spawn(function()
-        -- Tween In the Notification (inner frame)
-        local tweenIn = TweenService:Create(InnerFrame, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-            Position = UDim2.new(0, 0, 0, 10 + NotificationContainer.Size.Y.Offset)
-        })
-        tweenIn:Play()
-
-        -- Wait for the duration before tweening out
-        local duration = settings.duration or 5  -- Default to 5 seconds if not provided
-        wait(duration)
-
-        -- Tween Out the Notification (inner frame) to the right side of the screen
-        local tweenOut = TweenService:Create(InnerFrame, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
-            Position = UDim2.new(1, 310, 0, 10 + NotificationContainer.Size.Y.Offset)  -- Move to the right off-screen
-        })
-        tweenOut:Play()
-
-        -- Remove the notification after it is done tweening out
-        tweenOut.Completed:Connect(function()
-            Notification:Destroy()
-        end)
-    end)
+local function getNotifyParent()
+    local ok, ui = pcall(function() return gethui and gethui() end)
+    return (ok and ui) or CoreGui
 end
+
+-- gỡ bản cũ
+if getgenv().SxH_Notify then
+    pcall(function() getgenv().SxH_Notify.Destroy() end)
+end
+
+local notifyGui = Instance.new("ScreenGui")
+notifyGui.Name = "SxH_Notify"
+notifyGui.ResetOnSpawn = false
+notifyGui.IgnoreGuiInset = true
+notifyGui.DisplayOrder = 999
+notifyGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+notifyGui.Parent = getNotifyParent()
+
+local holder = Instance.new("Frame")
+holder.Name = "Holder"
+holder.AnchorPoint = Vector2.new(1, 0)
+holder.Position = UDim2.new(1, -12, 0, 12)
+holder.Size = UDim2.new(0, 300, 1, -24)
+holder.BackgroundTransparency = 1
+holder.Parent = notifyGui
+
+local list = Instance.new("UIListLayout")
+list.Padding = UDim.new(0, 8)
+list.SortOrder = Enum.SortOrder.LayoutOrder
+list.HorizontalAlignment = Enum.HorizontalAlignment.Right
+list.Parent = holder
+
+local uiScale = Instance.new("UIScale")
+uiScale.Parent = holder
+
+local function updateNotifyScale()
+    local cam = workspace.CurrentCamera
+    if not cam then return end
+    local w = cam.ViewportSize.X
+    uiScale.Scale = UserInputService.TouchEnabled and math.clamp(w / 1100, 0.7, 1) or 1
+end
+updateNotifyScale()
+if workspace.CurrentCamera then
+    table.insert(notifyConnections, workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(updateNotifyScale))
+end
+
+local function getNotifyColors()
+    local accent = CurrentTheme.Accent
+    return {
+        info = accent,
+        success = Color3.fromRGB(95, 220, 140),
+        warning = Color3.fromRGB(255, 190, 70),
+        error = Color3.fromRGB(255, 95, 95),
+        bg = CurrentTheme.Card or CurrentTheme.BackgroundSecondary,
+        title = CurrentTheme.TextPrimary,
+        body = CurrentTheme.TextSecondary,
+    }
+end
+
+function Notify.Send(settings)
+    settings = settings or {}
+    local colors = getNotifyColors()
+    local kind = (settings.type and colors[settings.type]) and settings.type or "info"
+    local color = colors[kind]
+    local duration = tonumber(settings.duration) or 4
+    order += 1
+
+    local wrapper = Instance.new("Frame")
+    wrapper.Name = "Notification"
+    wrapper.BackgroundTransparency = 1
+    wrapper.Size = UDim2.new(1, 0, 0, 0)
+    wrapper.AutomaticSize = Enum.AutomaticSize.Y
+    wrapper.LayoutOrder = order
+    wrapper.Parent = holder
+
+    local inner = Instance.new("Frame")
+    inner.Name = "Inner"
+    inner.Size = UDim2.new(1, 0, 0, 0)
+    inner.AutomaticSize = Enum.AutomaticSize.Y
+    inner.Position = UDim2.new(1, 40, 0, 0)
+    inner.BackgroundColor3 = colors.bg
+    inner.BackgroundTransparency = 1
+    inner.BorderSizePixel = 0
+    inner.ClipsDescendants = true
+    inner.Active = true
+    inner.Parent = wrapper
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 8)
+    corner.Parent = inner
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = color
+    stroke.Transparency = 0.55
+    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    stroke.Parent = inner
+
+    local accent = Instance.new("Frame")
+    accent.Name = "Accent"
+    accent.Size = UDim2.new(0, 3, 1, 0)
+    accent.BackgroundColor3 = color
+    accent.BorderSizePixel = 0
+    accent.ZIndex = 2
+    accent.Parent = inner
+
+    local content = Instance.new("Frame")
+    content.Name = "Content"
+    content.Size = UDim2.new(1, 0, 0, 0)
+    content.AutomaticSize = Enum.AutomaticSize.Y
+    content.BackgroundTransparency = 1
+    content.Parent = inner
+
+    local pad = Instance.new("UIPadding")
+    pad.PaddingTop = UDim.new(0, 10)
+    pad.PaddingBottom = UDim.new(0, 12)
+    pad.PaddingLeft = UDim.new(0, 14)
+    pad.PaddingRight = UDim.new(0, 10)
+    pad.Parent = content
+
+    local layout = Instance.new("UIListLayout")
+    layout.Padding = UDim.new(0, 3)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Parent = content
+
+    local function makeLabel(text, font, size, col, layoutOrder)
+        local lb = Instance.new("TextLabel")
+        lb.BackgroundTransparency = 1
+        lb.Size = UDim2.new(1, 0, 0, 0)
+        lb.AutomaticSize = Enum.AutomaticSize.Y
+        lb.Font = font
+        lb.TextSize = size
+        lb.TextColor3 = col
+        lb.Text = text
+        lb.TextWrapped = true
+        lb.TextXAlignment = Enum.TextXAlignment.Left
+        lb.TextYAlignment = Enum.TextYAlignment.Top
+        lb.LayoutOrder = layoutOrder
+        lb.Parent = content
+        return lb
+    end
+
+    if settings.title and settings.title ~= "" then
+        makeLabel(tostring(settings.title), Enum.Font.GothamBold, 14, colors.title, 1)
+    end
+    if settings.text and settings.text ~= "" then
+        makeLabel(tostring(settings.text), Enum.Font.Gotham, 12, colors.body, 2)
+    end
+
+    local progress = Instance.new("Frame")
+    progress.Name = "Progress"
+    progress.AnchorPoint = Vector2.new(0, 1)
+    progress.Position = UDim2.new(0, 0, 1, 0)
+    progress.Size = UDim2.new(1, 0, 0, 2)
+    progress.BackgroundColor3 = color
+    progress.BackgroundTransparency = 0.25
+    progress.BorderSizePixel = 0
+    progress.ZIndex = 2
+    progress.Parent = inner
+
+    local closing = false
+    local entry = {}
+
+    local function dismiss()
+        if closing then return end
+        closing = true
+        local idx = table.find(active, entry)
+        if idx then table.remove(active, idx) end
+        local tween = TweenService:Create(inner, TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
+            Position = UDim2.new(1, 40, 0, 0),
+            BackgroundTransparency = 1,
+        })
+        tween:Play()
+        tween.Completed:Once(function()
+            wrapper:Destroy()
+        end)
+    end
+    entry.Dismiss = dismiss
+
+    table.insert(active, entry)
+    if #active > MAX_VISIBLE then
+        active[1].Dismiss()
+    end
+
+    inner.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dismiss()
+        end
+    end)
+
+    TweenService:Create(inner, TweenInfo.new(0.4, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+        Position = UDim2.new(0, 0, 0, 0),
+        BackgroundTransparency = 0.12,
+    }):Play()
+
+    TweenService:Create(progress, TweenInfo.new(duration, Enum.EasingStyle.Linear), {
+        Size = UDim2.new(0, 0, 0, 2),
+    }):Play()
+    task.delay(duration, dismiss)
+
+    return entry
+end
+
+function Notify.Info(title, text, duration)
+    return Notify.Send({ title = title, text = text, duration = duration, type = "info" })
+end
+function Notify.Success(title, text, duration)
+    return Notify.Send({ title = title, text = text, duration = duration, type = "success" })
+end
+function Notify.Warn(title, text, duration)
+    return Notify.Send({ title = title, text = text, duration = duration, type = "warning" })
+end
+function Notify.Error(title, text, duration)
+    return Notify.Send({ title = title, text = text, duration = duration, type = "error" })
+end
+
+Notify.SendNotification = Notify.Send
+
+function Notify.Clear()
+    for _, e in ipairs(table.clone(active)) do
+        e.Dismiss()
+    end
+end
+
+function Notify.Destroy()
+    for _, c in ipairs(notifyConnections) do c:Disconnect() end
+    table.clear(notifyConnections)
+    table.clear(active)
+    notifyGui:Destroy()
+    getgenv().SxH_Notify = nil
+end
+
+getgenv().SxH_Notify = Notify
+
+-- Tương thích với code cũ
+function Library.SendNotification(settings)
+    return Notify.Send(settings)
+end
+
+Library.Notify = Notify
 
 function Library:get_screen_scale()
     local viewport_size_x = workspace.CurrentCamera.ViewportSize.X
@@ -610,7 +745,7 @@ function Library:create_ui()
     Container.BorderColor3 = Color3.fromRGB(0, 0, 0)
     Container.AnchorPoint = Vector2.new(0.5, 0.5)
     Container.Name = 'Container'
-    Container.BackgroundTransparency = 0
+    Container.BackgroundTransparency = 0.25  -- trong suốt hơn
     Container.BackgroundColor3 = CurrentTheme.Background
     Container.Position = UDim2.new(0.5, 0, 0.5, 0)
     Container.Size = UDim2.new(0, 0, 0, 0)
