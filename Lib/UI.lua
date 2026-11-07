@@ -17,10 +17,13 @@ GG.GalacticText = GG.GalacticText ~= false
 GG.GalacticColor1 = GG.GalacticColor1 or Color3.fromRGB(99, 102, 241)
 GG.GalacticColor2 = GG.GalacticColor2 or Color3.fromRGB(236, 72, 153)
 GG.GalacticSpeed = GG.GalacticSpeed or 1.5
+GG.Version = GG.Version or "v2.0"                   -- shown in the sidebar info card
+GG.NotifyMode = GG.NotifyMode or nil                -- "new" (default) or "old"; nil = use the saved choice
 
 local UI_NAME = GG.UIName
 local FOLDER_NAME = GG.FolderName
 local GUI_NAME = GG.GuiName
+local VERSION = GG.Version
 
 GG.Language = GG.Language or {
     CheckboxEnabled = "Enabled",
@@ -167,6 +170,11 @@ function Library_SetTheme(name)
         end
     end
 
+    -- Extra pieces (info card, key hint, watermark pill...) repaint themselves here
+    for _, hook in ipairs(Library._theme_hooks or {}) do
+        pcall(hook)
+    end
+
     if Library.Notify then
         Library.Notify.Success("Theme", "Switched to " .. name, 2)
     end
@@ -209,6 +217,19 @@ if not isfolder(FOLDER_NAME) then
     makefolder(FOLDER_NAME)
 end
 
+-- Small helper: create an Instance, set its properties, then parent it
+local function mk(class, props, parent)
+    local object = Instance.new(class)
+    if props then
+        for key, value in pairs(props) do
+            object[key] = value
+        end
+    end
+    if parent then
+        object.Parent = parent
+    end
+    return object
+end
 
 local Connections = setmetatable({
     disconnect = function(self, connection)
@@ -495,9 +516,15 @@ local Library = {
 
     _all_modules = {},  -- for Search
     _color_popups = {},
+    _theme_hooks = {},  -- extra pieces that repaint themselves when the theme changes
 }
 Library.__index = Library
 Library.SetTheme = Library_SetTheme
+
+-- Make sure the config always has the sub tables the library expects
+Library._config._flags = Library._config._flags or {}
+Library._config._keybinds = Library._config._keybinds or {}
+Library._config._library = Library._config._library or {}
 
 -- Config Manager 
 function Library.SaveConfig()
@@ -600,11 +627,20 @@ function Library.ClearAllKeybinds()
     end
 end
 
--- Watermark
-function Library.CreateWatermark(text)
+-- Watermark (top-left label with the UI name and FPS)
+function Library.DestroyWatermark()
+    if Library._wm_connection then
+        Library._wm_connection:Disconnect()
+        Library._wm_connection = nil
+    end
     if getgenv().SxH_Watermark then
         pcall(function() getgenv().SxH_Watermark:Destroy() end)
+        getgenv().SxH_Watermark = nil
     end
+end
+
+function Library.CreateWatermark(text)
+    Library.DestroyWatermark()
 
     local wmGui = Instance.new("ScreenGui")
     wmGui.Name = "SxH_Watermark"
@@ -651,7 +687,7 @@ function Library.CreateWatermark(text)
     local frames = 0
     local last = os.clock()
 
-    RunService.RenderStepped:Connect(function()
+    Library._wm_connection = RunService.RenderStepped:Connect(function()
         frames += 1
         local now = os.clock()
         if now - last >= 1 then
@@ -667,6 +703,26 @@ function Library.CreateWatermark(text)
     return wmGui
 end
 
+-- Turn the watermark on / off (also updates the "Show watermark" pill and saves the choice)
+function Library.SetWatermark(state, silent)
+    Library._watermark_on = state and true or false
+
+    if Library._watermark_on then
+        Library.CreateWatermark(UI_NAME)
+    else
+        Library.DestroyWatermark()
+    end
+
+    if Library._paint_watermark_pill then
+        Library._paint_watermark_pill(Library._watermark_on)
+    end
+
+    if not silent then
+        Library._config._library.watermark = Library._watermark_on
+        Config:save(game.GameId, Library._config)
+    end
+end
+
 
 function Library.new()
     local self = setmetatable({
@@ -677,6 +733,12 @@ function Library.new()
     self:create_ui()
 
     return self
+end
+
+-- Dark text on light accents, white text on dark accents
+local function contrastText(color)
+    local brightness = color.R * 0.299 + color.G * 0.587 + color.B * 0.114
+    return brightness > 0.6 and Color3.fromRGB(12, 13, 15) or Color3.fromRGB(255, 255, 255)
 end
 
 --  Notification 
@@ -745,7 +807,8 @@ local function getNotifyColors()
     }
 end
 
-function Notify.Send(settings)
+-- ===== OLD style (original notification: colored bar on the left + progress bar) =====
+local function sendOld(settings)
     settings = settings or {}
     local colors = getNotifyColors()
     local kind = (settings.type and colors[settings.type]) and settings.type or "info"
@@ -888,6 +951,155 @@ function Notify.Send(settings)
     return entry
 end
 
+-- ===== NEW style (rounded dark pill with a round icon on the left) =====
+local function sendNew(settings)
+    settings = settings or {}
+
+    local accent = CurrentTheme.Accent
+    local kinds = {
+        info = { color = accent, symbol = "i" },
+        success = { color = accent, symbol = "\226\156\147" },
+        warning = { color = Color3.fromRGB(245, 180, 50), symbol = "!" },
+        error = { color = Color3.fromRGB(240, 85, 85), symbol = "x" },
+    }
+    local kind = kinds[settings.type] and settings.type or "info"
+    local style = kinds[kind]
+    local duration = tonumber(settings.duration) or 4
+    order += 1
+
+    local wrapper = mk("Frame", {
+        Name = "Notification",
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        LayoutOrder = order,
+    }, holder)
+
+    local inner = mk("Frame", {
+        Name = "Inner",
+        Size = UDim2.new(1, 0, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        Position = UDim2.new(1, 40, 0, 0),
+        BackgroundColor3 = CurrentTheme.ModuleBackground,
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        Active = true,
+    }, wrapper)
+    mk("UICorner", { CornerRadius = UDim.new(0, 14) }, inner)
+    mk("UIStroke", { Color = CurrentTheme.Stroke, Thickness = 1.2, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, inner)
+
+    -- Round icon on the left
+    local icon = mk("Frame", {
+        Name = "Icon",
+        Position = UDim2.fromOffset(12, 9),
+        Size = UDim2.fromOffset(22, 22),
+        BackgroundColor3 = style.color,
+        BorderSizePixel = 0,
+    }, inner)
+    mk("UICorner", { CornerRadius = UDim.new(1, 0) }, icon)
+    mk("TextLabel", {
+        Name = "Symbol",
+        Size = UDim2.fromScale(1, 1),
+        BackgroundTransparency = 1,
+        Font = Enum.Font.GothamBold,
+        TextSize = 13,
+        TextColor3 = contrastText(style.color),
+        Text = style.symbol,
+    }, icon)
+
+    local content = mk("Frame", {
+        Name = "Content",
+        Size = UDim2.new(1, 0, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        BackgroundTransparency = 1,
+    }, inner)
+    mk("UIPadding", {
+        PaddingTop = UDim.new(0, 11),
+        PaddingBottom = UDim.new(0, 11),
+        PaddingLeft = UDim.new(0, 46),
+        PaddingRight = UDim.new(0, 14),
+    }, content)
+    mk("UIListLayout", { Padding = UDim.new(0, 2), SortOrder = Enum.SortOrder.LayoutOrder }, content)
+
+    local function label(text, font, size, textColor, layoutOrder)
+        return mk("TextLabel", {
+            Name = "NotifyText",
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 0),
+            AutomaticSize = Enum.AutomaticSize.Y,
+            Font = font,
+            TextSize = size,
+            TextColor3 = textColor,
+            Text = text,
+            TextWrapped = true,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextYAlignment = Enum.TextYAlignment.Top,
+            LayoutOrder = layoutOrder,
+        }, content)
+    end
+
+    if settings.title and settings.title ~= "" then
+        label(tostring(settings.title), Enum.Font.GothamMedium, 13, CurrentTheme.TextPrimary, 1)
+    end
+    if settings.text and settings.text ~= "" then
+        label(tostring(settings.text), Enum.Font.Gotham, 11, CurrentTheme.TextSecondary, 2)
+    end
+
+    local closing = false
+    local entry = {}
+
+    local function dismiss()
+        if closing then return end
+        closing = true
+        local idx = table.find(active, entry)
+        if idx then table.remove(active, idx) end
+        local out = TweenService:Create(inner, TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.In), {
+            Position = UDim2.new(1, 40, 0, 0),
+            BackgroundTransparency = 1,
+        })
+        out:Play()
+        out.Completed:Once(function()
+            wrapper:Destroy()
+        end)
+    end
+    entry.Dismiss = dismiss
+
+    table.insert(active, entry)
+    if #active > MAX_VISIBLE then
+        active[1].Dismiss()
+    end
+
+    inner.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dismiss()
+        end
+    end)
+
+    TweenService:Create(inner, TweenInfo.new(0.4, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+        Position = UDim2.new(0, 0, 0, 0),
+        BackgroundTransparency = 0.03,
+    }):Play()
+    task.delay(duration, dismiss)
+
+    return entry
+end
+
+-- Which style is active: GG.NotifyMode (if set), otherwise the saved choice, otherwise "new"
+local function getNotifyMode()
+    local mode = GG.NotifyMode
+    if mode ~= "old" and mode ~= "new" then
+        mode = Library._config._library and Library._config._library.notify_mode
+    end
+    return mode == "old" and "old" or "new"
+end
+
+function Notify.Send(settings)
+    if getNotifyMode() == "old" then
+        return sendOld(settings)
+    end
+    return sendNew(settings)
+end
+
 function Notify.Info(title, text, duration)
     return Notify.Send({ title = title, text = text, duration = duration, type = "info" })
 end
@@ -925,6 +1137,20 @@ function Library.SendNotification(settings)
 end
 
 Library.Notify = Notify
+
+-- Switch between the "old" and "new" notification style (saved in the config)
+function Library.SetNotifyMode(mode)
+    mode = (mode == "old") and "old" or "new"
+    GG.NotifyMode = mode
+    Library._config._library.notify_mode = mode
+    Config:save(game.GameId, Library._config)
+    Notify.Info("Notifications", "Style: " .. mode, 2)
+    return mode
+end
+
+function Library.GetNotifyMode()
+    return getNotifyMode()
+end
 
 function Library:get_screen_scale()
     local viewport_size_x = workspace.CurrentCamera.ViewportSize.X
@@ -1022,7 +1248,7 @@ function Library:create_ui()
     Tabs.ScrollBarImageTransparency = 1
     Tabs.ScrollBarThickness = 0
     Tabs.Name = 'Tabs'
-    Tabs.Size = UDim2.new(0, 129, 0, 401)
+    Tabs.Size = UDim2.new(0, 129, 0, 330)
     Tabs.Selectable = false
     Tabs.AutomaticCanvasSize = Enum.AutomaticSize.XY
     Tabs.BackgroundTransparency = 1
@@ -1132,6 +1358,198 @@ function Library:create_ui()
     Minimize.TextSize = 14
     Minimize.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     Minimize.Parent = Handler
+
+    ---------------------------------------------------------------
+    -- Info card (bottom-left of the sidebar)
+    ---------------------------------------------------------------
+    local InfoCard = mk('Frame', {
+        Name = 'InfoCard',
+        Position = UDim2.fromOffset(10, 397),
+        Size = UDim2.fromOffset(144, 44),
+        BackgroundColor3 = CurrentTheme.ModuleBackground,
+        BackgroundTransparency = 0.15,
+        BorderSizePixel = 0,
+    }, Handler)
+    mk('UICorner', { CornerRadius = UDim.new(0, 9) }, InfoCard)
+    local InfoStroke = mk('UIStroke', {
+        Color = CurrentTheme.Stroke,
+        Transparency = 0.3,
+        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+    }, InfoCard)
+
+    local InfoDot = mk('Frame', {
+        Name = 'InfoDot',
+        Position = UDim2.fromOffset(10, 14),
+        Size = UDim2.fromOffset(16, 16),
+        BackgroundColor3 = CurrentTheme.Accent,
+        BorderSizePixel = 0,
+    }, InfoCard)
+    mk('UICorner', { CornerRadius = UDim.new(1, 0) }, InfoDot)
+    local InfoLetter = mk('TextLabel', {
+        Name = 'InfoLetter',
+        Size = UDim2.fromScale(1, 1),
+        BackgroundTransparency = 1,
+        Font = Enum.Font.GothamBold,
+        TextSize = 11,
+        TextColor3 = contrastText(CurrentTheme.Accent),
+        Text = 'i',
+    }, InfoDot)
+
+    local InfoTitle = mk('TextLabel', {
+        Name = 'InfoTitle',
+        Position = UDim2.fromOffset(34, 8),
+        Size = UDim2.fromOffset(104, 14),
+        BackgroundTransparency = 1,
+        Font = Enum.Font.GothamMedium,
+        TextSize = 10,
+        TextColor3 = CurrentTheme.TextPrimary,
+        Text = UI_NAME .. ' ' .. VERSION,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextTruncate = Enum.TextTruncate.AtEnd,
+    }, InfoCard)
+    local InfoSub = mk('TextLabel', {
+        Name = 'InfoSub',
+        Position = UDim2.fromOffset(34, 23),
+        Size = UDim2.fromOffset(104, 12),
+        BackgroundTransparency = 1,
+        Font = Enum.Font.Gotham,
+        TextSize = 9,
+        TextColor3 = CurrentTheme.TextSecondary,
+        Text = 'Have a good day! ♡',
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextTruncate = Enum.TextTruncate.AtEnd,
+    }, InfoCard)
+
+    ---------------------------------------------------------------
+    -- Key hint: [*] [Insert] to toggle UI
+    ---------------------------------------------------------------
+    local toggleKeyName = (typeof(GG.ToggleKey) == 'EnumItem' and GG.ToggleKey.Name) or tostring(GG.ToggleKey or 'Insert')
+    local keyWidth = TextService:GetTextSize(toggleKeyName, 10, Enum.Font.GothamMedium, Vector2.new(1000, 100)).X + 14
+
+    local function makeChip(text, x, width)
+        local chip = mk('TextLabel', {
+            Name = 'KeyChip',
+            Text = text,
+            Font = Enum.Font.GothamMedium,
+            TextSize = 10,
+            TextColor3 = CurrentTheme.TextPrimary,
+            BackgroundColor3 = CurrentTheme.Card,
+            Position = UDim2.fromOffset(x, 452),
+            Size = UDim2.fromOffset(width, 18),
+            BorderSizePixel = 0,
+        }, Handler)
+        mk('UICorner', { CornerRadius = UDim.new(0, 5) }, chip)
+        return chip
+    end
+
+    local StarChip = makeChip('*', 14, 18)
+    local KeyChip = makeChip(toggleKeyName, 36, keyWidth)
+    local HintLabel = mk('TextLabel', {
+        Name = 'KeyHint',
+        Text = 'to toggle UI',
+        Font = Enum.Font.Gotham,
+        TextSize = 11,
+        TextColor3 = CurrentTheme.TextSecondary,
+        BackgroundTransparency = 1,
+        Position = UDim2.fromOffset(36 + keyWidth + 6, 452),
+        Size = UDim2.fromOffset(60, 18),
+        TextXAlignment = Enum.TextXAlignment.Left,
+    }, Handler)
+
+    ---------------------------------------------------------------
+    -- "Show watermark" pill (bottom-right of the window)
+    ---------------------------------------------------------------
+    local Pill = mk('Frame', {
+        Name = 'WatermarkPill',
+        AnchorPoint = Vector2.new(1, 1),
+        Position = UDim2.new(1, -12, 1, -8),
+        Size = UDim2.fromOffset(140, 28),
+        BackgroundColor3 = CurrentTheme.ModuleBackground,
+        BackgroundTransparency = 0.15,
+        BorderSizePixel = 0,
+    }, Handler)
+    mk('UICorner', { CornerRadius = UDim.new(0, 9) }, Pill)
+    local PillStroke = mk('UIStroke', {
+        Color = CurrentTheme.Stroke,
+        Transparency = 0.3,
+        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+    }, Pill)
+    local PillIcon = mk('TextLabel', {
+        Name = 'PillIcon',
+        Position = UDim2.fromOffset(9, 0),
+        Size = UDim2.fromOffset(16, 28),
+        BackgroundTransparency = 1,
+        Font = Enum.Font.GothamBold,
+        TextSize = 12,
+        TextColor3 = CurrentTheme.TextSecondary,
+        Text = '\240\159\145\145',
+    }, Pill)
+    local PillText = mk('TextLabel', {
+        Name = 'PillText',
+        Position = UDim2.fromOffset(28, 0),
+        Size = UDim2.fromOffset(76, 28),
+        BackgroundTransparency = 1,
+        Font = Enum.Font.GothamMedium,
+        TextSize = 10,
+        TextColor3 = CurrentTheme.TextPrimary,
+        Text = 'Show watermark',
+        TextXAlignment = Enum.TextXAlignment.Left,
+    }, Pill)
+
+    local PillTrack = mk('TextButton', {
+        Name = 'PillTrack',
+        Text = '',
+        AutoButtonColor = false,
+        AnchorPoint = Vector2.new(1, 0.5),
+        Position = UDim2.new(1, -10, 0.5, 0),
+        Size = UDim2.fromOffset(26, 14),
+        BackgroundColor3 = CurrentTheme.ToggleOff,
+        BorderSizePixel = 0,
+    }, Pill)
+    mk('UICorner', { CornerRadius = UDim.new(1, 0) }, PillTrack)
+    local PillKnob = mk('Frame', {
+        Name = 'PillKnob',
+        AnchorPoint = Vector2.new(0, 0.5),
+        Position = UDim2.new(0, 2, 0.5, 0),
+        Size = UDim2.fromOffset(10, 10),
+        BackgroundColor3 = Color3.fromRGB(255, 255, 255),
+        BorderSizePixel = 0,
+    }, PillTrack)
+    mk('UICorner', { CornerRadius = UDim.new(1, 0) }, PillKnob)
+
+    local function paintPill(state)
+        TweenService:Create(PillTrack, TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+            BackgroundColor3 = state and CurrentTheme.Accent or CurrentTheme.ToggleOff,
+        }):Play()
+        TweenService:Create(PillKnob, TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+            Position = state and UDim2.new(1, -12, 0.5, 0) or UDim2.new(0, 2, 0.5, 0),
+        }):Play()
+    end
+    Library._paint_watermark_pill = paintPill
+
+    PillTrack.MouseButton1Click:Connect(function()
+        Library.SetWatermark(not Library._watermark_on)
+    end)
+
+    -- Repaint the extra pieces when the theme changes
+    table.insert(Library._theme_hooks, function()
+        InfoCard.BackgroundColor3 = CurrentTheme.ModuleBackground
+        InfoStroke.Color = CurrentTheme.Stroke
+        InfoDot.BackgroundColor3 = CurrentTheme.Accent
+        InfoLetter.TextColor3 = contrastText(CurrentTheme.Accent)
+        InfoTitle.TextColor3 = CurrentTheme.TextPrimary
+        InfoSub.TextColor3 = CurrentTheme.TextSecondary
+        StarChip.BackgroundColor3 = CurrentTheme.Card
+        StarChip.TextColor3 = CurrentTheme.TextPrimary
+        KeyChip.BackgroundColor3 = CurrentTheme.Card
+        KeyChip.TextColor3 = CurrentTheme.TextPrimary
+        HintLabel.TextColor3 = CurrentTheme.TextSecondary
+        Pill.BackgroundColor3 = CurrentTheme.ModuleBackground
+        PillStroke.Color = CurrentTheme.Stroke
+        PillIcon.TextColor3 = CurrentTheme.TextSecondary
+        PillText.TextColor3 = CurrentTheme.TextPrimary
+        paintPill(Library._watermark_on)
+    end)
     
     local UIScale = Instance.new('UIScale')
     UIScale.Parent = Container    
@@ -1257,10 +1675,12 @@ function Library:create_ui()
 
         AcrylicBlur.new(Container)
 
-        -- Watermark 
-        if GG.Watermark ~= false then
-            Library.CreateWatermark(UI_NAME)
+        -- Watermark: the saved choice wins, otherwise GG.Watermark decides
+        local savedWatermark = Library._config._library.watermark
+        if savedWatermark == nil then
+            savedWatermark = (GG.Watermark ~= false)
         end
+        Library.SetWatermark(savedWatermark, true)
 
         self._ui_loaded = true
     end
@@ -1410,7 +1830,7 @@ function Library:create_ui()
         LeftSection.Name = 'LeftSection'
         LeftSection.AutomaticCanvasSize = Enum.AutomaticSize.XY
         LeftSection.ScrollBarThickness = 0
-        LeftSection.Size = UDim2.new(0, 243, 0, 445)
+        LeftSection.Size = UDim2.new(0, 243, 0, 412)
         LeftSection.Selectable = false
         LeftSection.AnchorPoint = Vector2.new(0, 0.5)
         LeftSection.ScrollBarImageTransparency = 1
@@ -1437,7 +1857,7 @@ function Library:create_ui()
         RightSection.Name = 'RightSection'
         RightSection.AutomaticCanvasSize = Enum.AutomaticSize.XY
         RightSection.ScrollBarThickness = 0
-        RightSection.Size = UDim2.new(0, 243, 0, 445)
+        RightSection.Size = UDim2.new(0, 243, 0, 412)
         RightSection.Selectable = false
         RightSection.AnchorPoint = Vector2.new(0, 0.5)
         RightSection.ScrollBarImageTransparency = 1
@@ -3454,7 +3874,9 @@ function Library:create_ui()
             end
 
             -- ===================== Color Picker =====================
-            -- ===================== Color Picker (HSV style) =====================
+            -- A swatch row that opens a popup: saturation/value square, hue bar,
+            -- hex box with copy button, preset colors and Cancel / Confirm.
+            -- settings: { title, flag, default = Color3, callback = function(color) end, notify = true }
             function ModuleManager:create_colorpicker(settings: any)
                 LayoutOrderModule = LayoutOrderModule + 1
 
@@ -3466,378 +3888,435 @@ function Library:create_ui()
                 end
                 Options.Size = UDim2.fromOffset(241, self._size)
 
-                local defaultColor = settings.default or Color3.fromRGB(99, 102, 241)
+                -- Start from the saved color (stored as {R,G,B}), otherwise the default
+                local current = settings.default or Color3.fromRGB(99, 102, 241)
                 if Library:flag_type(settings.flag, "table") then
-                    local t = Library._config._flags[settings.flag]
-                    if t and t.R then
-                        defaultColor = Color3.new(t.R, t.G, t.B)
+                    local saved = Library._config._flags[settings.flag]
+                    if saved and saved.R then
+                        current = Color3.new(saved.R, saved.G, saved.B)
                     end
                 end
 
-                local h, s, v = defaultColor:ToHSV()
+                local row = mk("Frame", {
+                    Name = "ColorPickerRow",
+                    Size = UDim2.new(0, 207, 0, 22),
+                    BackgroundTransparency = 1,
+                    LayoutOrder = LayoutOrderModule,
+                }, Options)
 
-                local holder = Instance.new("Frame")
-                holder.Size = UDim2.new(0, 207, 0, 22)
-                holder.BackgroundTransparency = 1
-                holder.LayoutOrder = LayoutOrderModule
-                holder.Parent = Options
+                local title = mk("TextLabel", {
+                    Name = "ColorTitle",
+                    Size = UDim2.new(1, -44, 1, 0),
+                    BackgroundTransparency = 1,
+                    Font = Enum.Font.GothamSemibold,
+                    TextSize = 11,
+                    TextColor3 = CurrentTheme.TextPrimary,
+                    TextXAlignment = Enum.TextXAlignment.Left,
+                    Text = settings.title or "Color",
+                }, row)
 
-                local title = Instance.new("TextLabel")
-                title.Size = UDim2.new(1, -36, 1, 0)
-                title.BackgroundTransparency = 1
-                title.Font = Enum.Font.GothamSemibold
-                title.TextSize = 11
-                title.TextColor3 = CurrentTheme.TextPrimary
-                title.TextXAlignment = Enum.TextXAlignment.Left
-                title.Text = settings.title or "Color"
-                title.Parent = holder
+                local swatch = mk("TextButton", {
+                    Name = "Swatch",
+                    Text = "",
+                    AutoButtonColor = false,
+                    AnchorPoint = Vector2.new(1, 0.5),
+                    Position = UDim2.new(1, 0, 0.5, 0),
+                    Size = UDim2.fromOffset(36, 18),
+                    BackgroundColor3 = current,
+                    BorderSizePixel = 0,
+                }, row)
+                mk("UICorner", { CornerRadius = UDim.new(0, 5) }, swatch)
+                local swatchStroke = mk("UIStroke", {
+                    Color = CurrentTheme.Stroke,
+                    Transparency = 0.3,
+                    ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+                }, swatch)
 
-                local arrow = Instance.new("TextLabel")
-                arrow.Size = UDim2.new(0, 14, 0, 14)
-                arrow.Position = UDim2.new(1, -36, 0.5, 0)
-                arrow.AnchorPoint = Vector2.new(0, 0.5)
-                arrow.BackgroundTransparency = 1
-                arrow.Font = Enum.Font.GothamBold
-                arrow.TextSize = 10
-                arrow.TextColor3 = CurrentTheme.TextSecondary
-                arrow.Text = "▾"
-                arrow.Parent = holder
+                -- Apply a color: update the swatch, save it and fire the callback
+                local function commit(color)
+                    current = color
+                    swatch.BackgroundColor3 = color
+                    Library._config._flags[settings.flag] = { R = color.R, G = color.G, B = color.B }
+                    Config:save(game.GameId, Library._config)
+                    if settings.callback then
+                        settings.callback(color)
+                    end
+                end
 
-                local preview = Instance.new("TextButton")
-                preview.Size = UDim2.new(0, 22, 0, 18)
-                preview.Position = UDim2.new(1, -22, 0.5, 0)
-                preview.AnchorPoint = Vector2.new(0, 0.5)
-                preview.BackgroundColor3 = defaultColor
-                preview.Text = ""
-                preview.AutoButtonColor = false
-                preview.BorderSizePixel = 0
-                preview.Parent = holder
-
-                local pCorner = Instance.new("UICorner")
-                pCorner.CornerRadius = UDim.new(0, 5)
-                pCorner.Parent = preview
-
-                local pStroke = Instance.new("UIStroke")
-                pStroke.Color = CurrentTheme.Stroke
-                pStroke.Transparency = 0.3
-                pStroke.Parent = preview
-
-                -- Popup ScreenGui
-                local popupGui = Instance.new("ScreenGui")
-                popupGui.Name = "SxH_ColorPopup"
-                popupGui.ResetOnSpawn = false
-                popupGui.IgnoreGuiInset = true
-                popupGui.DisplayOrder = 1000
-                popupGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-                pcall(function()
-                    popupGui.Parent = (gethui and gethui()) or CoreGui
-                end)
-                if not popupGui.Parent then popupGui.Parent = CoreGui end
-
-                local popup = Instance.new("Frame")
-                popup.Size = UDim2.new(0, 200, 0, 180)
-                popup.BackgroundColor3 = CurrentTheme.ModuleBackground
-                popup.BackgroundTransparency = 0.05
-                popup.Visible = false
-                popup.ZIndex = 200
-                popup.Parent = popupGui
-
-                local popCorner = Instance.new("UICorner")
-                popCorner.CornerRadius = UDim.new(0, 10)
-                popCorner.Parent = popup
-
-                local popStroke = Instance.new("UIStroke")
-                popStroke.Color = CurrentTheme.Stroke
-                popStroke.Transparency = 0.3
-                popStroke.Parent = popup
-
-                -- SV Panel (saturation / value)
-                local svPanel = Instance.new("ImageButton")
-                svPanel.Name = "SV"
-                svPanel.Size = UDim2.new(0, 176, 0, 110)
-                svPanel.Position = UDim2.new(0, 12, 0, 12)
-                svPanel.BackgroundColor3 = Color3.fromHSV(h, 1, 1)
-                svPanel.AutoButtonColor = false
-                svPanel.BorderSizePixel = 0
-                svPanel.ZIndex = 201
-                svPanel.Parent = popup
-
-                local svCorner = Instance.new("UICorner")
-                svCorner.CornerRadius = UDim.new(0, 8)
-                svCorner.Parent = svPanel
-
-                -- White to transparent gradient (saturation axis)
-                local svWhite = Instance.new("Frame")
-                svWhite.Size = UDim2.new(1, 0, 1, 0)
-                svWhite.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-                svWhite.BorderSizePixel = 0
-                svWhite.ZIndex = 202
-                svWhite.Parent = svPanel
-
-                local svWhiteCorner = Instance.new("UICorner")
-                svWhiteCorner.CornerRadius = UDim.new(0, 8)
-                svWhiteCorner.Parent = svWhite
-
-                local svWhiteGrad = Instance.new("UIGradient")
-                svWhiteGrad.Transparency = NumberSequence.new({
-                    NumberSequenceKeypoint.new(0, 0),
-                    NumberSequenceKeypoint.new(1, 1)
-                })
-                svWhiteGrad.Parent = svWhite
-
-                -- Black gradient (value axis)
-                local svBlack = Instance.new("Frame")
-                svBlack.Size = UDim2.new(1, 0, 1, 0)
-                svBlack.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-                svBlack.BorderSizePixel = 0
-                svBlack.ZIndex = 203
-                svBlack.Parent = svPanel
-
-                local svBlackCorner = Instance.new("UICorner")
-                svBlackCorner.CornerRadius = UDim.new(0, 8)
-                svBlackCorner.Parent = svBlack
-
-                local svBlackGrad = Instance.new("UIGradient")
-                svBlackGrad.Rotation = 90
-                svBlackGrad.Transparency = NumberSequence.new({
-                    NumberSequenceKeypoint.new(0, 1),
-                    NumberSequenceKeypoint.new(1, 0)
-                })
-                svBlackGrad.Parent = svBlack
-
-                -- SV cursor
-                local svCursor = Instance.new("Frame")
-                svCursor.Size = UDim2.new(0, 12, 0, 12)
-                svCursor.AnchorPoint = Vector2.new(0.5, 0.5)
-                svCursor.Position = UDim2.new(s, 0, 1 - v, 0)
-                svCursor.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-                svCursor.BorderSizePixel = 0
-                svCursor.ZIndex = 204
-                svCursor.Parent = svPanel
-
-                local svCursorCorner = Instance.new("UICorner")
-                svCursorCorner.CornerRadius = UDim.new(1, 0)
-                svCursorCorner.Parent = svCursor
-
-                local svCursorStroke = Instance.new("UIStroke")
-                svCursorStroke.Color = CurrentTheme.Stroke
-                svCursorStroke.Thickness = 1.5
-                svCursorStroke.Parent = svCursor
-
-                -- Hue slider
-                local hueBar = Instance.new("ImageButton")
-                hueBar.Name = "Hue"
-                hueBar.Size = UDim2.new(0, 176, 0, 14)
-                hueBar.Position = UDim2.new(0, 12, 0, 132)
-                hueBar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-                hueBar.AutoButtonColor = false
-                hueBar.BorderSizePixel = 0
-                hueBar.ZIndex = 201
-                hueBar.Parent = popup
-
-                local hueCorner = Instance.new("UICorner")
-                hueCorner.CornerRadius = UDim.new(1, 0)
-                hueCorner.Parent = hueBar
-
-                local hueGrad = Instance.new("UIGradient")
-                hueGrad.Color = ColorSequence.new({
-                    ColorSequenceKeypoint.new(0.00, Color3.fromRGB(255, 0, 0)),
-                    ColorSequenceKeypoint.new(0.17, Color3.fromRGB(255, 255, 0)),
-                    ColorSequenceKeypoint.new(0.33, Color3.fromRGB(0, 255, 0)),
-                    ColorSequenceKeypoint.new(0.50, Color3.fromRGB(0, 255, 255)),
-                    ColorSequenceKeypoint.new(0.67, Color3.fromRGB(0, 0, 255)),
-                    ColorSequenceKeypoint.new(0.83, Color3.fromRGB(255, 0, 255)),
-                    ColorSequenceKeypoint.new(1.00, Color3.fromRGB(255, 0, 0)),
-                })
-                hueGrad.Parent = hueBar
-
-                local hueCursor = Instance.new("Frame")
-                hueCursor.Size = UDim2.new(0, 6, 0, 18)
-                hueCursor.AnchorPoint = Vector2.new(0.5, 0.5)
-                hueCursor.Position = UDim2.new(h, 0, 0.5, 0)
-                hueCursor.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-                hueCursor.BorderSizePixel = 0
-                hueCursor.ZIndex = 202
-                hueCursor.Parent = hueBar
-
-                local hueCursorCorner = Instance.new("UICorner")
-                hueCursorCorner.CornerRadius = UDim.new(1, 0)
-                hueCursorCorner.Parent = hueCursor
-
-                local hueCursorStroke = Instance.new("UIStroke")
-                hueCursorStroke.Color = CurrentTheme.Stroke
-                hueCursorStroke.Thickness = 1
-                hueCursorStroke.Parent = hueCursor
-
-                -- Hex label
-                local hexLabel = Instance.new("TextLabel")
-                hexLabel.Size = UDim2.new(1, -48, 0, 16)
-                hexLabel.Position = UDim2.new(0, 12, 0, 154)
-                hexLabel.BackgroundTransparency = 1
-                hexLabel.Font = Enum.Font.Gotham
-                hexLabel.TextSize = 11
-                hexLabel.TextColor3 = CurrentTheme.TextSecondary
-                hexLabel.TextXAlignment = Enum.TextXAlignment.Left
-                hexLabel.ZIndex = 201
-                hexLabel.Parent = popup
-
-                -- Nút X đóng popup
-                local closeBtn = Instance.new("TextButton")
-                closeBtn.Size = UDim2.new(0, 22, 0, 22)
-                closeBtn.Position = UDim2.new(1, -30, 0, 6)
-                closeBtn.BackgroundColor3 = CurrentTheme.Card
-                closeBtn.BackgroundTransparency = 0.2
-                closeBtn.Text = "×"
-                closeBtn.Font = Enum.Font.GothamBold
-                closeBtn.TextSize = 16
-                closeBtn.TextColor3 = CurrentTheme.TextPrimary
-                closeBtn.AutoButtonColor = false
-                closeBtn.ZIndex = 210
-                closeBtn.Parent = popup
-
-                local closeCorner = Instance.new("UICorner")
-                closeCorner.CornerRadius = UDim.new(0, 6)
-                closeCorner.Parent = closeBtn
-
-                local function updatePopupTheme()
-                    popup.BackgroundColor3 = CurrentTheme.ModuleBackground
-                    popStroke.Color = CurrentTheme.Stroke
-                    hexLabel.TextColor3 = CurrentTheme.TextSecondary
-                    closeBtn.BackgroundColor3 = CurrentTheme.Card
-                    closeBtn.TextColor3 = CurrentTheme.TextPrimary
-                    svCursorStroke.Color = CurrentTheme.Stroke
-                    hueCursorStroke.Color = CurrentTheme.Stroke
-                    pStroke.Color = CurrentTheme.Stroke
+                -- Keep the row in sync with theme changes (called by Library_SetTheme)
+                table.insert(Library._color_popups, function()
                     title.TextColor3 = CurrentTheme.TextPrimary
-                    arrow.TextColor3 = CurrentTheme.TextSecondary
-                end
+                    swatchStroke.Color = CurrentTheme.Stroke
+                end)
 
-                table.insert(Library._color_popups, updatePopupTheme)
-                updatePopupTheme()
+                local function open_popup()
+                    -- Only one popup can be open at a time
+                    if Library._close_picker then
+                        Library._close_picker()
+                    end
 
-                local function toHex(color)
-                    return string.format("#%02X%02X%02X",
-                        math.floor(color.R * 255 + 0.5),
-                        math.floor(color.G * 255 + 0.5),
-                        math.floor(color.B * 255 + 0.5))
-                end
+                    local T = CurrentTheme
+                    local h, sat, val = current:ToHSV()
+                    local working = current
+                    local dragMode = nil
+                    local moveKey = "picker_move_" .. tostring(settings.flag)
+                    local endKey = "picker_end_" .. tostring(settings.flag)
+                    local viewport = workspace.CurrentCamera.ViewportSize
+                    local accentB = T.Accent:Lerp(Color3.fromRGB(139, 92, 246), 0.55)
 
-                local function applyColor(save)
-                    local c = Color3.fromHSV(h, s, v)
-                    preview.BackgroundColor3 = c
-                    svPanel.BackgroundColor3 = Color3.fromHSV(h, 1, 1)
-                    svCursor.Position = UDim2.new(s, 0, 1 - v, 0)
-                    hueCursor.Position = UDim2.new(h, 0, 0.5, 0)
-                    hexLabel.Text = toHex(c)
+                    local Popup = mk("Frame", {
+                        Name = "ColorPickerPopup",
+                        AnchorPoint = Vector2.new(0.5, 0.5),
+                        Position = UDim2.new(0.5, 0, 0.5, 0),
+                        Size = UDim2.fromOffset(300, 288),
+                        BackgroundColor3 = T.ModuleBackground,
+                        BorderSizePixel = 0,
+                        Active = true,
+                        ZIndex = 50,
+                    }, Library._ui or CoreGui)
+                    mk("UICorner", { CornerRadius = UDim.new(0, 14) }, Popup)
+                    mk("UIStroke", { Color = T.Stroke, Thickness = 1.5, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, Popup)
+                    -- Shrink on small screens
+                    mk("UIScale", { Scale = math.clamp((viewport.X - 24) / 320, 0.55, 1) }, Popup)
 
-                    if save ~= false then
-                        Library._config._flags[settings.flag] = { R = c.R, G = c.G, B = c.B }
-                        Config:save(game.GameId, Library._config)
-                        if settings.callback then
-                            settings.callback(c)
+                    -- Header: palette icon + title + close button
+                    mk("TextLabel", {
+                        Name = "PickerIcon",
+                        Text = "\240\159\142\168",
+                        TextSize = 16,
+                        Position = UDim2.fromOffset(15, 12),
+                        Size = UDim2.fromOffset(22, 24),
+                        BackgroundTransparency = 1,
+                    }, Popup)
+                    mk("TextLabel", {
+                        Name = "PickerTitle",
+                        Font = Enum.Font.GothamBold,
+                        TextSize = 15,
+                        TextColor3 = T.TextPrimary,
+                        Text = "Color Picker",
+                        Position = UDim2.fromOffset(42, 12),
+                        Size = UDim2.fromOffset(200, 24),
+                        BackgroundTransparency = 1,
+                        TextXAlignment = Enum.TextXAlignment.Left,
+                    }, Popup)
+
+                    local CloseButton = mk("TextButton", {
+                        Text = "X",
+                        Font = Enum.Font.GothamBold,
+                        TextSize = 12,
+                        TextColor3 = T.TextSecondary,
+                        AutoButtonColor = false,
+                        BackgroundColor3 = T.Card,
+                        Position = UDim2.fromOffset(262, 8),
+                        Size = UDim2.fromOffset(26, 26),
+                        BorderSizePixel = 0,
+                    }, Popup)
+                    mk("UICorner", { CornerRadius = UDim.new(0, 6) }, CloseButton)
+
+                    -- Saturation / value square
+                    local SV = mk("Frame", {
+                        Name = "SV",
+                        Position = UDim2.fromOffset(15, 44),
+                        Size = UDim2.fromOffset(270, 124),
+                        BackgroundColor3 = Color3.fromHSV(h, 1, 1),
+                        BorderSizePixel = 0,
+                        Active = true,
+                    }, Popup)
+                    mk("UICorner", { CornerRadius = UDim.new(0, 10) }, SV)
+
+                    -- White fades out to the right
+                    local WhiteLayer = mk("Frame", {
+                        Size = UDim2.fromScale(1, 1),
+                        BackgroundColor3 = Color3.new(1, 1, 1),
+                        BorderSizePixel = 0,
+                    }, SV)
+                    mk("UICorner", { CornerRadius = UDim.new(0, 10) }, WhiteLayer)
+                    mk("UIGradient", {
+                        Transparency = NumberSequence.new({
+                            NumberSequenceKeypoint.new(0, 0),
+                            NumberSequenceKeypoint.new(1, 1),
+                        }),
+                    }, WhiteLayer)
+
+                    -- Black fades in towards the bottom
+                    local BlackLayer = mk("Frame", {
+                        Size = UDim2.fromScale(1, 1),
+                        BackgroundColor3 = Color3.new(0, 0, 0),
+                        BorderSizePixel = 0,
+                    }, SV)
+                    mk("UICorner", { CornerRadius = UDim.new(0, 10) }, BlackLayer)
+                    mk("UIGradient", {
+                        Rotation = 90,
+                        Transparency = NumberSequence.new({
+                            NumberSequenceKeypoint.new(0, 1),
+                            NumberSequenceKeypoint.new(1, 0),
+                        }),
+                    }, BlackLayer)
+
+                    local SVKnob = mk("Frame", {
+                        AnchorPoint = Vector2.new(0.5, 0.5),
+                        Size = UDim2.fromOffset(14, 14),
+                        BackgroundColor3 = working,
+                        BorderSizePixel = 0,
+                        ZIndex = 3,
+                    }, SV)
+                    mk("UICorner", { CornerRadius = UDim.new(1, 0) }, SVKnob)
+                    mk("UIStroke", { Color = Color3.new(1, 1, 1), Thickness = 2 }, SVKnob)
+
+                    -- Hue bar
+                    local Hue = mk("Frame", {
+                        Name = "Hue",
+                        Position = UDim2.fromOffset(15, 182),
+                        Size = UDim2.fromOffset(270, 16),
+                        BackgroundColor3 = Color3.new(1, 1, 1),
+                        BorderSizePixel = 0,
+                        Active = true,
+                    }, Popup)
+                    mk("UICorner", { CornerRadius = UDim.new(1, 0) }, Hue)
+                    mk("UIGradient", {
+                        Color = ColorSequence.new({
+                            ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)),
+                            ColorSequenceKeypoint.new(1 / 6, Color3.fromRGB(255, 255, 0)),
+                            ColorSequenceKeypoint.new(2 / 6, Color3.fromRGB(0, 255, 0)),
+                            ColorSequenceKeypoint.new(3 / 6, Color3.fromRGB(0, 255, 255)),
+                            ColorSequenceKeypoint.new(4 / 6, Color3.fromRGB(0, 0, 255)),
+                            ColorSequenceKeypoint.new(5 / 6, Color3.fromRGB(255, 0, 255)),
+                            ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0)),
+                        }),
+                    }, Hue)
+
+                    local HueKnob = mk("Frame", {
+                        AnchorPoint = Vector2.new(0.5, 0.5),
+                        Size = UDim2.fromOffset(10, 26),
+                        BackgroundColor3 = Color3.new(1, 1, 1),
+                        BorderSizePixel = 0,
+                        ZIndex = 3,
+                    }, Hue)
+                    mk("UICorner", { CornerRadius = UDim.new(0, 4) }, HueKnob)
+                    mk("UIStroke", { Color = T.Stroke, Thickness = 1 }, HueKnob)
+
+                    -- Hex box + copy button
+                    local HexBox = mk("TextBox", {
+                        Name = "HexBox",
+                        Font = Enum.Font.Gotham,
+                        TextSize = 13,
+                        TextColor3 = T.TextPrimary,
+                        PlaceholderText = "#RRGGBB",
+                        PlaceholderColor3 = T.TextSecondary,
+                        Text = "",
+                        ClearTextOnFocus = false,
+                        TextXAlignment = Enum.TextXAlignment.Left,
+                        BackgroundColor3 = T.Card,
+                        Position = UDim2.fromOffset(15, 212),
+                        Size = UDim2.fromOffset(122, 28),
+                        BorderSizePixel = 0,
+                    }, Popup)
+                    mk("UICorner", { CornerRadius = UDim.new(0, 6) }, HexBox)
+                    mk("UIPadding", { PaddingLeft = UDim.new(0, 8) }, HexBox)
+
+                    local CopyButton = mk("TextButton", {
+                        Text = "",
+                        AutoButtonColor = false,
+                        BackgroundColor3 = T.Card,
+                        Position = UDim2.fromOffset(141, 212),
+                        Size = UDim2.fromOffset(30, 28),
+                        BorderSizePixel = 0,
+                    }, Popup)
+                    mk("UICorner", { CornerRadius = UDim.new(0, 6) }, CopyButton)
+
+                    -- Copy icon: two overlapping squares
+                    local CopyBack = mk("Frame", {
+                        Position = UDim2.fromOffset(10, 6),
+                        Size = UDim2.fromOffset(10, 10),
+                        BackgroundTransparency = 1,
+                        BorderSizePixel = 0,
+                    }, CopyButton)
+                    mk("UICorner", { CornerRadius = UDim.new(0, 2) }, CopyBack)
+                    mk("UIStroke", { Color = T.TextSecondary, Thickness = 1.2 }, CopyBack)
+                    local CopyFront = mk("Frame", {
+                        Position = UDim2.fromOffset(7, 10),
+                        Size = UDim2.fromOffset(10, 10),
+                        BackgroundColor3 = T.Card,
+                        BorderSizePixel = 0,
+                    }, CopyButton)
+                    mk("UICorner", { CornerRadius = UDim.new(0, 2) }, CopyFront)
+                    mk("UIStroke", { Color = T.TextSecondary, Thickness = 1.2 }, CopyFront)
+
+                    mk("Frame", {
+                        Position = UDim2.fromOffset(180, 215),
+                        Size = UDim2.fromOffset(1, 22),
+                        BackgroundColor3 = T.Stroke,
+                        BorderSizePixel = 0,
+                    }, Popup)
+
+                    -- Cancel / Confirm
+                    local Cancel = mk("TextButton", {
+                        Text = "Cancel",
+                        Font = Enum.Font.GothamSemibold,
+                        TextSize = 12,
+                        TextColor3 = T.TextPrimary,
+                        AutoButtonColor = false,
+                        BackgroundColor3 = T.Card,
+                        Position = UDim2.fromOffset(100, 251),
+                        Size = UDim2.fromOffset(86, 26),
+                        BorderSizePixel = 0,
+                    }, Popup)
+                    mk("UICorner", { CornerRadius = UDim.new(0, 6) }, Cancel)
+
+                    local Confirm = mk("TextButton", {
+                        Text = "Confirm",
+                        Font = Enum.Font.GothamBold,
+                        TextSize = 12,
+                        TextColor3 = contrastText(T.Accent),
+                        AutoButtonColor = false,
+                        BackgroundColor3 = Color3.new(1, 1, 1),
+                        Position = UDim2.fromOffset(196, 251),
+                        Size = UDim2.fromOffset(86, 26),
+                        BorderSizePixel = 0,
+                    }, Popup)
+                    mk("UICorner", { CornerRadius = UDim.new(0, 6) }, Confirm)
+                    mk("UIGradient", { Color = ColorSequence.new(T.Accent, accentB) }, Confirm)
+
+                    ---------------------------------------------------
+                    -- Logic
+                    ---------------------------------------------------
+                    -- Redraw knobs, hue tint and hex text. `exact` keeps an exact color (typed hex / presets)
+                    local function refresh(exact)
+                        working = exact or Color3.fromHSV(h, sat, val)
+                        SV.BackgroundColor3 = Color3.fromHSV(h, 1, 1)
+                        SVKnob.Position = UDim2.fromScale(sat, 1 - val)
+                        SVKnob.BackgroundColor3 = working
+                        HueKnob.Position = UDim2.new(h, 0, 0.5, 0)
+                        HexBox.Text = "#" .. string.upper(working:ToHex())
+                    end
+
+                    local function setColor(color)
+                        h, sat, val = color:ToHSV()
+                        refresh(color)
+                    end
+
+                    local function close()
+                        Connections:disconnect(moveKey)
+                        Connections:disconnect(endKey)
+                        if Library._close_picker == close then
+                            Library._close_picker = nil
+                        end
+                        Popup:Destroy()
+                    end
+                    Library._close_picker = close
+
+                    -- Preset colors
+                    local presets = { "6366F1", "EC4899", "EF4444", "A8A3C7", "D1D5DB" }
+                    for index, hex in ipairs(presets) do
+                        local presetColor = Color3.fromHex(hex)
+                        local Dot = mk("TextButton", {
+                            Text = "",
+                            AutoButtonColor = false,
+                            Position = UDim2.fromOffset(194 + (index - 1) * 19, 218),
+                            Size = UDim2.fromOffset(14, 14),
+                            BackgroundColor3 = presetColor,
+                            BorderSizePixel = 0,
+                        }, Popup)
+                        mk("UICorner", { CornerRadius = UDim.new(1, 0) }, Dot)
+                        mk("UIStroke", { Color = T.Stroke, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, Dot)
+                        Dot.MouseButton1Click:Connect(function()
+                            setColor(presetColor)
+                        end)
+                    end
+
+                    -- Dragging the square / hue bar (mouse and touch)
+                    local function updateDrag(position)
+                        if dragMode == "sv" then
+                            sat = math.clamp((position.X - SV.AbsolutePosition.X) / SV.AbsoluteSize.X, 0, 1)
+                            val = 1 - math.clamp((position.Y - SV.AbsolutePosition.Y) / SV.AbsoluteSize.Y, 0, 1)
+                            refresh()
+                        elseif dragMode == "hue" then
+                            h = math.clamp((position.X - Hue.AbsolutePosition.X) / Hue.AbsoluteSize.X, 0, 1)
+                            refresh()
                         end
                     end
-                end
-                applyColor(false)
 
-                -- Drag helpers
-                local function bindDrag(btn, onMove)
-                    local dragging = false
-                    btn.InputBegan:Connect(function(input)
-                        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                            dragging = true
-                            onMove()
+                    local function isPress(input)
+                        return input.UserInputType == Enum.UserInputType.MouseButton1
+                            or input.UserInputType == Enum.UserInputType.Touch
+                    end
+
+                    SV.InputBegan:Connect(function(input)
+                        if isPress(input) then
+                            dragMode = "sv"
+                            updateDrag(input.Position)
                         end
                     end)
-                    UserInputService.InputChanged:Connect(function(input)
-                        if not dragging then return end
+
+                    Hue.InputBegan:Connect(function(input)
+                        if isPress(input) then
+                            dragMode = "hue"
+                            updateDrag(input.Position)
+                        end
+                    end)
+
+                    Connections[moveKey] = UserInputService.InputChanged:Connect(function(input)
+                        if not dragMode then return end
                         if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-                            onMove()
+                            updateDrag(input.Position)
                         end
                     end)
-                    UserInputService.InputEnded:Connect(function(input)
-                        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                            if dragging then
-                                dragging = false
-                                applyColor(true)
-                            end
+
+                    Connections[endKey] = UserInputService.InputEnded:Connect(function(input)
+                        if isPress(input) then
+                            dragMode = nil
                         end
                     end)
+
+                    -- Typed hex value
+                    HexBox.FocusLost:Connect(function()
+                        local text = (string.gsub(HexBox.Text, "[#%s]", ""))
+                        local ok, parsed = pcall(Color3.fromHex, "#" .. text)
+                        if ok and parsed then
+                            setColor(parsed)
+                        else
+                            refresh(working) -- invalid input, restore the previous text
+                        end
+                    end)
+
+                    CopyButton.MouseButton1Click:Connect(function()
+                        local hexText = "#" .. string.upper(working:ToHex())
+                        if setclipboard then
+                            pcall(setclipboard, hexText)
+                            Library.Notify.Info("Copied", hexText, 2)
+                        else
+                            Library.Notify.Warn("Copy not supported", "Your executor has no setclipboard", 3)
+                        end
+                    end)
+
+                    CloseButton.MouseButton1Click:Connect(close)
+                    Cancel.MouseButton1Click:Connect(close)
+
+                    Confirm.MouseButton1Click:Connect(function()
+                        commit(working)
+                        if settings.notify ~= false then
+                            Library.Notify.Success("Color updated!", nil, 2)
+                        end
+                        close()
+                    end)
+
+                    refresh(current)
                 end
 
-                bindDrag(svPanel, function()
-                    local relX = math.clamp((mouse.X - svPanel.AbsolutePosition.X) / svPanel.AbsoluteSize.X, 0, 1)
-                    local relY = math.clamp((mouse.Y - svPanel.AbsolutePosition.Y) / svPanel.AbsoluteSize.Y, 0, 1)
-                    s = relX
-                    v = 1 - relY
-                    applyColor(false)
-                end)
-
-                bindDrag(hueBar, function()
-                    local relX = math.clamp((mouse.X - hueBar.AbsolutePosition.X) / hueBar.AbsoluteSize.X, 0, 1)
-                    h = relX
-                    applyColor(false)
-                end)
-
-                local function openPopup()
-                    local abs = preview.AbsolutePosition
-                    local size = preview.AbsoluteSize
-                    popup.Position = UDim2.fromOffset(abs.X - 200 + size.X, abs.Y + size.Y + 6)
-                    popup.Visible = true
-                    arrow.Text = "▴"
-                end
-
-                local function closePopup()
-                    popup.Visible = false
-                    arrow.Text = "▾"
-                end
-
-                closeBtn.MouseButton1Click:Connect(closePopup)
-
-                closeBtn.MouseEnter:Connect(function()
-                    TweenService:Create(closeBtn, TweenInfo.new(0.15), {
-                        BackgroundColor3 = CurrentTheme.Accent,
-                        TextColor3 = CurrentTheme.TextPrimary
-                    }):Play()
-                end)
-                closeBtn.MouseLeave:Connect(function()
-                    TweenService:Create(closeBtn, TweenInfo.new(0.15), {
-                        BackgroundColor3 = CurrentTheme.Card,
-                        TextColor3 = CurrentTheme.TextPrimary
-                    }):Play()
-                end)
-
-                preview.MouseButton1Click:Connect(function()
-                    if popup.Visible then closePopup() else openPopup() end
-                end)
+                swatch.MouseButton1Click:Connect(open_popup)
 
                 title.InputBegan:Connect(function(input)
-                    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                        if popup.Visible then closePopup() else openPopup() end
-                    end
-                end)
-
-                UserInputService.InputBegan:Connect(function(input)
-                    if not popup.Visible then return end
-                    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                        local pos = input.Position
-                        local pAbs, pSize = popup.AbsolutePosition, popup.AbsoluteSize
-                        local inPopup = pos.X >= pAbs.X and pos.X <= pAbs.X + pSize.X and pos.Y >= pAbs.Y and pos.Y <= pAbs.Y + pSize.Y
-                        local pr, ps = preview.AbsolutePosition, preview.AbsoluteSize
-                        local inPreview = pos.X >= pr.X and pos.X <= pr.X + ps.X and pos.Y >= pr.Y and pos.Y <= pr.Y + ps.Y
-                        if not inPopup and not inPreview then
-                            closePopup()
-                        end
+                    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                        open_popup()
                     end
                 end)
 
                 return {
                     Set = function(_, color)
-                        h, s, v = color:ToHSV()
-                        applyColor(true)
+                        commit(color)
                     end,
                     Get = function()
-                        return Color3.fromHSV(h, s, v)
+                        return current
                     end
                 }
             end
