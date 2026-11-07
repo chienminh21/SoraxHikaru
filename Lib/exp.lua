@@ -6,20 +6,25 @@ local combat_tab = main:create_tab("Combat", "rbxassetid://76499042599127")
 local utility_tab = main:create_tab("Utility", "rbxassetid://126017907477623")
 -- Đổi theme (trước khi tạo UI)
 getgenv().GG = {
-    Theme = "Light",                         
+    Theme = "Light",
+
+    -- Tên & Folder
+    UIName     = "Sora x Hikaru",   -- chữ hiện trên UI
+    FolderName = "SoraHikaru",      -- folder lưu config
     
-    -- Custom màu chữ
-    TextColor = Color3.fromRGB(255, 255, 255),           
-    TextSecondaryColor = Color3.fromRGB(0, 0, 0), 
-    
-    -- Custom accent
+
+    -- Trong suốt
+    Transparency = 0.25,
+
+    -- Màu
+    TextColor = Color3.fromRGB(30, 30, 40),
     AccentColor = Color3.fromRGB(99, 102, 241),
-    
-    -- Galactic Text 
-    GalacticText = true,                             
-    GalacticColor1 = Color3.fromRGB(99, 102, 241),   
-    GalacticColor2 = Color3.fromRGB(236, 72, 153),   
-    GalacticSpeed = 0.1,                             
+
+    -- Galactic
+    GalacticText = true,
+    GalacticColor1 = Color3.fromRGB(99, 102, 241),
+    GalacticColor2 = Color3.fromRGB(236, 72, 153),
+    GalacticSpeed = 1.5,
 }
 -- Combat Module
 local aimbot = combat_tab:create_module({
