@@ -1,23 +1,56 @@
-getgenv().GG = {
-    SelectedLanguage = "en", -- "en" or "th"
-    Theme = "Light", -- "Light" or "Dark"
-    Language = {
-        CheckboxEnabled = "Enabled",
-        CheckboxDisabled = "Disabled",
-        SliderValue = "Value",
-        DropdownSelect = "Select",
-        DropdownNone = "None",
-        DropdownSelected = "Selected",
-        ButtonClick = "Click",
-        TextboxEnter = "Enter",
-        ModuleEnabled = "Enabled",
-        ModuleDisabled = "Disabled",
-        TabGeneral = "General",
-        TabSettings = "Settings",
-        Loading = "Loading...",
-        Error = "Error",
-        Success = "Success"
+--[[
+    ====================== CUSTOM ======================
+    Viết ở ngoài trước khi load UI:
+
+    getgenv().GG = {
+        Theme = "Light",                    -- "Light" | "Dark"
+        SelectedLanguage = "en",
+
+        -- Custom màu chữ
+        TextColor = Color3.fromRGB(30, 30, 40),          -- chữ chính
+        TextSecondaryColor = Color3.fromRGB(90, 90, 110), -- chữ phụ
+
+        -- Custom accent
+        AccentColor = Color3.fromRGB(99, 102, 241),
+
+        -- Galactic Text (chữ hiệu ứng)
+        GalacticText = true,                -- bật/tắt
+        GalacticColor1 = Color3.fromRGB(99, 102, 241),   -- màu 1
+        GalacticColor2 = Color3.fromRGB(236, 72, 153),   -- màu 2 (hồng)
+        GalacticSpeed = 1.5,                -- tốc độ chạy gradient
     }
+    ====================================================
+]]
+
+getgenv().GG = getgenv().GG or {}
+
+-- Default values
+GG.SelectedLanguage = GG.SelectedLanguage or "en"
+GG.Theme = GG.Theme or "Light"
+GG.TextColor = GG.TextColor or nil
+GG.TextSecondaryColor = GG.TextSecondaryColor or nil
+GG.AccentColor = GG.AccentColor or nil
+GG.GalacticText = GG.GalacticText ~= false   -- mặc định bật
+GG.GalacticColor1 = GG.GalacticColor1 or Color3.fromRGB(99, 102, 241)
+GG.GalacticColor2 = GG.GalacticColor2 or Color3.fromRGB(236, 72, 153)
+GG.GalacticSpeed = GG.GalacticSpeed or 1.5
+
+GG.Language = GG.Language or {
+    CheckboxEnabled = "Enabled",
+    CheckboxDisabled = "Disabled",
+    SliderValue = "Value",
+    DropdownSelect = "Select",
+    DropdownNone = "None",
+    DropdownSelected = "Selected",
+    ButtonClick = "Click",
+    TextboxEnter = "Enter",
+    ModuleEnabled = "Enabled",
+    ModuleDisabled = "Disabled",
+    TabGeneral = "General",
+    TabSettings = "Settings",
+    Loading = "Loading...",
+    Error = "Error",
+    Success = "Success"
 }
 
 local SelectedLanguage = GG.SelectedLanguage or "en"
@@ -53,6 +86,18 @@ local Theme = {
 }
 
 local CurrentTheme = Theme[GG.Theme] or Theme.Light
+
+-- Apply custom colors nếu user set
+if GG.TextColor then
+    CurrentTheme.TextPrimary = GG.TextColor
+end
+if GG.TextSecondaryColor then
+    CurrentTheme.TextSecondary = GG.TextSecondaryColor
+end
+if GG.AccentColor then
+    CurrentTheme.Accent = GG.AccentColor
+    CurrentTheme.AccentHover = GG.AccentColor:Lerp(Color3.new(1,1,1), 0.2)
+end
 
 function convertStringToTable(inputString)
     local result = {}
@@ -614,27 +659,42 @@ function Library:create_ui()
     
     local ClientName = Instance.new('TextLabel')
     ClientName.FontFace = Font.new('rbxasset://fonts/families/GothamSSm.json', Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
-    ClientName.TextColor3 = CurrentTheme.Accent
+    ClientName.TextColor3 = Color3.fromRGB(255, 255, 255)
     ClientName.TextTransparency = 0
     ClientName.Text = 'Sora x Hikaru'
     ClientName.Name = 'ClientName'
-    ClientName.Size = UDim2.new(0, 31, 0, 13)
+    ClientName.Size = UDim2.new(0, 110, 0, 16)
     ClientName.AnchorPoint = Vector2.new(0, 0.5)
     ClientName.Position = UDim2.new(0.0560000017285347, 0, 0.054999999701976776, 0)
     ClientName.BackgroundTransparency = 1
     ClientName.TextXAlignment = Enum.TextXAlignment.Left
     ClientName.BorderSizePixel = 0
-    ClientName.BorderColor3 = Color3.fromRGB(0, 0, 0)
-    ClientName.TextSize = 13
-    ClientName.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    ClientName.TextSize = 14
     ClientName.Parent = Handler
     
-    local UIGradient = Instance.new('UIGradient')
-    UIGradient.Color = ColorSequence.new{
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(155, 155, 155)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 255, 255))
-    }
-    UIGradient.Parent = ClientName
+    -- Galactic Text Effect
+    if GG.GalacticText then
+        local UIGradient = Instance.new('UIGradient')
+        UIGradient.Color = ColorSequence.new{
+            ColorSequenceKeypoint.new(0, GG.GalacticColor1),
+            ColorSequenceKeypoint.new(0.5, GG.GalacticColor2),
+            ColorSequenceKeypoint.new(1, GG.GalacticColor1)
+        }
+        UIGradient.Parent = ClientName
+
+        -- Chạy gradient liên tục
+        task.spawn(function()
+            local offset = 0
+            while ClientName and ClientName.Parent do
+                offset = offset + 0.015 * (GG.GalacticSpeed or 1.5)
+                if offset > 1 then offset = -1 end
+                UIGradient.Offset = Vector2.new(offset, 0)
+                task.wait()
+            end
+        end)
+    else
+        ClientName.TextColor3 = CurrentTheme.Accent
+    end
     
     local Pin = Instance.new('Frame')
     Pin.Name = 'Pin'
