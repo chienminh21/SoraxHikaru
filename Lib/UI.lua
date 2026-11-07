@@ -1682,22 +1682,40 @@ function Library:create_ui()
 
             local function get_options_height()
                 local layout = Options:FindFirstChildOfClass("UIListLayout")
-                local contentY = 0
-                if layout then
-                    contentY = layout.AbsoluteContentSize.Y
-                end
-                if contentY < 1 then
-                    contentY = ModuleManager._size or 0
-                end
-                return contentY + 20
+                local contentY = layout and layout.AbsoluteContentSize.Y or 0
+                local trackedHeight = ModuleManager._size or 0
+
+                -- Keep enough room for layout padding and the last control.
+                local measuredHeight = contentY + 20
+                local fallbackHeight = trackedHeight + 20
+
+                return math.max(measuredHeight, fallbackHeight)
             end
 
             function ModuleManager:refresh_size()
-                if not ModuleManager._state then return end
-                local h = get_options_height()
-                Options.Size = UDim2.fromOffset(241, h)
-                Module.Size = UDim2.fromOffset(241, 93 + h)
+                if not ModuleManager._state then
+                    return
+                end
+
+                local optionsHeight = get_options_height()
+
+                Options.Size = UDim2.fromOffset(241, optionsHeight)
+                Module.Size = UDim2.fromOffset(241, 93 + optionsHeight)
             end
+
+            -- UIListLayout can update its content size one frame after a control
+            -- is inserted. Recalculate after the layout has settled so the last
+            -- control is not clipped by Module.ClipsDescendants.
+            local function schedule_size_refresh()
+                task.defer(function()
+                    task.defer(function()
+                        ModuleManager:refresh_size()
+                    end)
+                end)
+            end
+
+            Options.ChildAdded:Connect(schedule_size_refresh)
+            Options.ChildRemoved:Connect(schedule_size_refresh)
 
             function ModuleManager:change_state(state: boolean)
                 self._state = state
@@ -1723,6 +1741,11 @@ function Library:create_ui()
                     task.defer(function()
                         if self._state then
                             ModuleManager:refresh_size()
+                            task.defer(function()
+                                if self._state then
+                                    ModuleManager:refresh_size()
+                                end
+                            end)
                         end
                     end)
                 else
