@@ -72,9 +72,9 @@ local Theme = {
     }
 }
 
-local CurrentTheme = Theme[GG.Theme] or Theme.Light
+local CurrentTheme = Theme[GG.Theme] or Theme.Dark
 
--- Apply custom colors nếu user set
+-- Apply custom colors if user set
 if GG.TextColor then
     CurrentTheme.TextPrimary = GG.TextColor
 end
@@ -84,6 +84,60 @@ end
 if GG.AccentColor then
     CurrentTheme.Accent = GG.AccentColor
     CurrentTheme.AccentHover = GG.AccentColor:Lerp(Color3.new(1,1,1), 0.2)
+end
+
+local function applyThemeColors(target, source)
+    for k, v in pairs(source) do
+        target[k] = v
+    end
+    if GG.TextColor then target.TextPrimary = GG.TextColor end
+    if GG.TextSecondaryColor then target.TextSecondary = GG.TextSecondaryColor end
+    if GG.AccentColor then
+        target.Accent = GG.AccentColor
+        target.AccentHover = GG.AccentColor:Lerp(Color3.new(1,1,1), 0.2)
+    end
+end
+
+function Library_SetTheme(name)
+    name = name or "Dark"
+    if name ~= "Dark" and name ~= "Light" then
+        name = "Dark"
+    end
+    GG.Theme = name
+    local src = Theme[name] or Theme.Dark
+    applyThemeColors(CurrentTheme, src)
+
+    -- Update main window
+    local gui = Library._ui
+    if gui then
+        local container = gui:FindFirstChild("Container")
+        if container then
+            container.BackgroundColor3 = CurrentTheme.Background
+            local stroke = container:FindFirstChildOfClass("UIStroke")
+            if stroke then stroke.Color = CurrentTheme.Stroke end
+        end
+        for _, obj in ipairs(gui:GetDescendants()) do
+            if obj.Name == "Module" and obj:IsA("Frame") then
+                obj.BackgroundColor3 = CurrentTheme.ModuleBackground
+                local st = obj:FindFirstChildOfClass("UIStroke")
+                if st then st.Color = CurrentTheme.Stroke end
+            elseif obj.Name == "Tab" and obj:IsA("TextButton") then
+                -- keep selected state simple
+            elseif obj:IsA("TextLabel") or obj:IsA("TextBox") or obj:IsA("TextButton") then
+                -- skip accent labels
+            end
+        end
+        for _, data in ipairs(Library._all_modules or {}) do
+            if data.frame then
+                data.frame.BackgroundColor3 = CurrentTheme.ModuleBackground
+            end
+        end
+    end
+
+    if Library.Notify then
+        Library.Notify.Success("Theme", "Switched to " .. name, 2)
+    end
+    return true
 end
 
 function convertStringToTable(inputString)
@@ -409,6 +463,7 @@ local Library = {
     _all_modules = {},  -- for Search
 }
 Library.__index = Library
+Library.SetTheme = Library_SetTheme
 
 -- ===================== Config Manager =====================
 function Library.SaveConfig()
@@ -1096,13 +1151,30 @@ function Library:create_ui()
 
     function self:Update1Run(a)
         if a == "nil" then
-            Container.BackgroundTransparency = 0.05000000074505806;
+            Container.BackgroundTransparency = 0.05
         else
             pcall(function()
-                Container.BackgroundTransparency = tonumber(a);
-            end);
-        end;
-    end;
+                Container.BackgroundTransparency = tonumber(a)
+            end)
+        end
+    end
+
+    function self:SetTransparency(value)
+        value = math.clamp(tonumber(value) or 0.15, 0, 0.9)
+        GG.Transparency = value
+        Container.BackgroundTransparency = value
+    end
+
+    Library.SetTransparency = function(value)
+        if Library._ui then
+            local container = Library._ui:FindFirstChild("Container")
+            if container then
+                value = math.clamp(tonumber(value) or 0.15, 0, 0.9)
+                GG.Transparency = value
+                container.BackgroundTransparency = value
+            end
+        end
+    end
 
     function self:UIVisiblity()
         MainGui.Enabled = not MainGui.Enabled;
@@ -2913,7 +2985,9 @@ function Library:create_ui()
                     Config:save(game.GameId, Library._config)
                 
                     -- Callback with the updated option(s)
-                    settings.callback(option)
+                    if settings.callback then
+                        pcall(settings.callback, option)
+                    end
                 end
                 
                 local CurrentDropSizeState = 0;
