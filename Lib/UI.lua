@@ -107,6 +107,18 @@ function Library_SetTheme(name)
     local src = Theme[name] or Theme.Dark
     applyThemeColors(CurrentTheme, src)
 
+    -- Color picker popups are parented separately from the main interface.
+    -- Update them explicitly whenever the active theme changes.
+    for index = #Library._color_popups, 1, -1 do
+        local updatePopupTheme = Library._color_popups[index]
+        if updatePopupTheme then
+            local success = pcall(updatePopupTheme)
+            if not success then
+                table.remove(Library._color_popups, index)
+            end
+        end
+    end
+
     local gui = Library._ui
     if gui then
         local container = gui:FindFirstChild("Container")
@@ -482,6 +494,7 @@ local Library = {
     _container_position = nil,
 
     _all_modules = {},  -- for Search
+    _color_popups = {},
 }
 Library.__index = Library
 Library.SetTheme = Library_SetTheme
@@ -3523,7 +3536,7 @@ function Library:create_ui()
 
                 local popup = Instance.new("Frame")
                 popup.Size = UDim2.new(0, 200, 0, 180)
-                popup.BackgroundColor3 = Color3.fromRGB(22, 24, 32)
+                popup.BackgroundColor3 = CurrentTheme.ModuleBackground
                 popup.BackgroundTransparency = 0.05
                 popup.Visible = false
                 popup.ZIndex = 200
@@ -3534,7 +3547,7 @@ function Library:create_ui()
                 popCorner.Parent = popup
 
                 local popStroke = Instance.new("UIStroke")
-                popStroke.Color = Color3.fromRGB(60, 65, 80)
+                popStroke.Color = CurrentTheme.Stroke
                 popStroke.Transparency = 0.3
                 popStroke.Parent = popup
 
@@ -3607,7 +3620,7 @@ function Library:create_ui()
                 svCursorCorner.Parent = svCursor
 
                 local svCursorStroke = Instance.new("UIStroke")
-                svCursorStroke.Color = Color3.fromRGB(40, 40, 40)
+                svCursorStroke.Color = CurrentTheme.Stroke
                 svCursorStroke.Thickness = 1.5
                 svCursorStroke.Parent = svCursor
 
@@ -3652,7 +3665,7 @@ function Library:create_ui()
                 hueCursorCorner.Parent = hueCursor
 
                 local hueCursorStroke = Instance.new("UIStroke")
-                hueCursorStroke.Color = Color3.fromRGB(30, 30, 30)
+                hueCursorStroke.Color = CurrentTheme.Stroke
                 hueCursorStroke.Thickness = 1
                 hueCursorStroke.Parent = hueCursor
 
@@ -3663,7 +3676,7 @@ function Library:create_ui()
                 hexLabel.BackgroundTransparency = 1
                 hexLabel.Font = Enum.Font.Gotham
                 hexLabel.TextSize = 11
-                hexLabel.TextColor3 = Color3.fromRGB(180, 185, 200)
+                hexLabel.TextColor3 = CurrentTheme.TextSecondary
                 hexLabel.TextXAlignment = Enum.TextXAlignment.Left
                 hexLabel.ZIndex = 201
                 hexLabel.Parent = popup
@@ -3672,12 +3685,12 @@ function Library:create_ui()
                 local closeBtn = Instance.new("TextButton")
                 closeBtn.Size = UDim2.new(0, 22, 0, 22)
                 closeBtn.Position = UDim2.new(1, -30, 0, 6)
-                closeBtn.BackgroundColor3 = Color3.fromRGB(40, 42, 52)
+                closeBtn.BackgroundColor3 = CurrentTheme.Card
                 closeBtn.BackgroundTransparency = 0.2
                 closeBtn.Text = "×"
                 closeBtn.Font = Enum.Font.GothamBold
                 closeBtn.TextSize = 16
-                closeBtn.TextColor3 = Color3.fromRGB(220, 220, 230)
+                closeBtn.TextColor3 = CurrentTheme.TextPrimary
                 closeBtn.AutoButtonColor = false
                 closeBtn.ZIndex = 210
                 closeBtn.Parent = popup
@@ -3685,6 +3698,22 @@ function Library:create_ui()
                 local closeCorner = Instance.new("UICorner")
                 closeCorner.CornerRadius = UDim.new(0, 6)
                 closeCorner.Parent = closeBtn
+
+                local function updatePopupTheme()
+                    popup.BackgroundColor3 = CurrentTheme.ModuleBackground
+                    popStroke.Color = CurrentTheme.Stroke
+                    hexLabel.TextColor3 = CurrentTheme.TextSecondary
+                    closeBtn.BackgroundColor3 = CurrentTheme.Card
+                    closeBtn.TextColor3 = CurrentTheme.TextPrimary
+                    svCursorStroke.Color = CurrentTheme.Stroke
+                    hueCursorStroke.Color = CurrentTheme.Stroke
+                    pStroke.Color = CurrentTheme.Stroke
+                    title.TextColor3 = CurrentTheme.TextPrimary
+                    arrow.TextColor3 = CurrentTheme.TextSecondary
+                end
+
+                table.insert(Library._color_popups, updatePopupTheme)
+                updatePopupTheme()
 
                 local function toHex(color)
                     return string.format("#%02X%02X%02X",
@@ -3767,14 +3796,14 @@ function Library:create_ui()
 
                 closeBtn.MouseEnter:Connect(function()
                     TweenService:Create(closeBtn, TweenInfo.new(0.15), {
-                        BackgroundColor3 = Color3.fromRGB(220, 60, 70),
-                        TextColor3 = Color3.fromRGB(255, 255, 255)
+                        BackgroundColor3 = CurrentTheme.Accent,
+                        TextColor3 = CurrentTheme.TextPrimary
                     }):Play()
                 end)
                 closeBtn.MouseLeave:Connect(function()
                     TweenService:Create(closeBtn, TweenInfo.new(0.15), {
-                        BackgroundColor3 = Color3.fromRGB(40, 42, 52),
-                        TextColor3 = Color3.fromRGB(220, 220, 230)
+                        BackgroundColor3 = CurrentTheme.Card,
+                        TextColor3 = CurrentTheme.TextPrimary
                     }):Play()
                 end)
 
