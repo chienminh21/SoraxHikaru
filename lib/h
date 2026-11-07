@@ -1,0 +1,14 @@
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/chienminh21/SoraxHikaru/refs/heads/main/lib/test"))()
+        local Window = Library.new()
+        local Tab = Window:create_tab("Main", "rbxassetid://ICON_ID")
+        local Module = Tab:create_module({ title = "ESP", description = "Show things", flag = "esp", callback = function(v) end })
+        Module:create_checkbox({ title = "Candy", flag = "candy", callback = function(v) end })
+Module:create_colorpicker({
+    title = "ESP Color",
+    flag = "esp_color",
+    default = Color3.fromRGB(255, 80, 180),
+    callback = function(color) print(color) end,
+})
+
+        Window:load()
+        Library.SendNotification({ title = "Hello", text = "UI loaded", duration = 4, type = "success" })
