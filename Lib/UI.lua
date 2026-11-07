@@ -8,6 +8,8 @@ GG.FolderName = GG.FolderName or "SoraHikaru"
 GG.GuiName = GG.GuiName or "SoraHikaru"
 GG.Transparency = GG.Transparency or 0.15
 GG.Watermark = GG.Watermark ~= false
+GG.ToggleKey = GG.ToggleKey or Enum.KeyCode.Insert  -- phím mở/đóng UI
+GG.Animations = GG.Animations ~= false              -- bật/tắt tween
 GG.TextColor = GG.TextColor or nil
 GG.TextSecondaryColor = GG.TextSecondaryColor or nil
 GG.AccentColor = GG.AccentColor or nil
@@ -433,6 +435,79 @@ function Library.ResetConfig()
     Config:save(game.GameId, Library._config)
     if Library.Notify then
         Library.Notify.Warn("Config", "Đã reset config về mặc định", 3)
+    end
+end
+
+function Library.ExportConfig()
+    local ok, encoded = pcall(function()
+        return HttpService:JSONEncode(Library._config)
+    end)
+    if ok and encoded then
+        if setclipboard then
+            pcall(setclipboard, encoded)
+            if Library.Notify then
+                Library.Notify.Success("Config", "Đã copy config vào clipboard", 3)
+            end
+        else
+            if Library.Notify then
+                Library.Notify.Info("Config", "Export OK (không có setclipboard)", 3)
+            end
+        end
+        return encoded
+    end
+    if Library.Notify then
+        Library.Notify.Error("Config", "Export thất bại", 3)
+    end
+    return nil
+end
+
+function Library.ImportConfig(jsonString)
+    if not jsonString or jsonString == "" then
+        if Library.Notify then
+            Library.Notify.Error("Config", "Chuỗi config trống", 3)
+        end
+        return false
+    end
+    local ok, data = pcall(function()
+        return HttpService:JSONDecode(jsonString)
+    end)
+    if ok and typeof(data) == "table" then
+        Library._config = data
+        Config:save(game.GameId, Library._config)
+        if Library.Notify then
+            Library.Notify.Success("Config", "Import thành công (mở lại UI để áp dụng)", 4)
+        end
+        return true
+    end
+    if Library.Notify then
+        Library.Notify.Error("Config", "Import thất bại - JSON sai", 3)
+    end
+    return false
+end
+
+function Library.GetKeybinds()
+    local list = {}
+    for flag, key in pairs(Library._config._keybinds or {}) do
+        table.insert(list, {
+            flag = flag,
+            key = tostring(key):gsub("Enum.KeyCode.", "")
+        })
+    end
+    return list
+end
+
+function Library.ClearKeybind(flag)
+    if Library._config._keybinds then
+        Library._config._keybinds[flag] = nil
+        Config:save(game.GameId, Library._config)
+    end
+end
+
+function Library.ClearAllKeybinds()
+    Library._config._keybinds = {}
+    Config:save(game.GameId, Library._config)
+    if Library.Notify then
+        Library.Notify.Warn("Keybinds", "Đã xóa tất cả keybind", 3)
     end
 end
 
@@ -3585,6 +3660,117 @@ function Library:create_ui()
                 }
             end
 
+            -- ===================== Section / Group =====================
+            function ModuleManager:create_section(settings: any)
+                LayoutOrderModule = LayoutOrderModule + 1
+                if self._size == 0 then self._size = 11 end
+                self._size += 22
+
+                if ModuleManager._state then
+                    Module.Size = UDim2.fromOffset(241, 93 + self._size)
+                end
+                Options.Size = UDim2.fromOffset(241, self._size)
+
+                local section = Instance.new("Frame")
+                section.Size = UDim2.new(0, 207, 0, 18)
+                section.BackgroundTransparency = 1
+                section.LayoutOrder = LayoutOrderModule
+                section.Parent = Options
+
+                local label = Instance.new("TextLabel")
+                label.Size = UDim2.new(1, 0, 1, 0)
+                label.BackgroundTransparency = 1
+                label.Font = Enum.Font.GothamBold
+                label.TextSize = 11
+                label.TextColor3 = CurrentTheme.Accent
+                label.TextXAlignment = Enum.TextXAlignment.Left
+                label.Text = settings.title or "Section"
+                label.Parent = section
+
+                local line = Instance.new("Frame")
+                line.Size = UDim2.new(1, 0, 0, 1)
+                line.Position = UDim2.new(0, 0, 1, 0)
+                line.BackgroundColor3 = CurrentTheme.Stroke
+                line.BackgroundTransparency = 0.4
+                line.BorderSizePixel = 0
+                line.Parent = section
+
+                return section
+            end
+
+            -- ===================== Player List =====================
+            function ModuleManager:create_playerlist(settings: any)
+                local players = {}
+                for _, plr in ipairs(Players:GetPlayers()) do
+                    if plr ~= LocalPlayer then
+                        table.insert(players, plr.Name)
+                    end
+                end
+                if #players == 0 then
+                    players = {"(no players)"}
+                end
+
+                local dd = ModuleManager:create_dropdown({
+                    title = settings.title or "Player",
+                    flag = settings.flag or "playerlist",
+                    options = players,
+                    multi_dropdown = settings.multi_dropdown or false,
+                    maximum_options = settings.maximum_options or 8,
+                    callback = settings.callback or function() end
+                })
+
+                -- refresh khi có người vào/ra
+                Players.PlayerAdded:Connect(function()
+                    -- dropdown không rebuild dễ, chỉ notify
+                end)
+
+                return dd
+            end
+
+            -- ===================== Tooltip helper =====================
+            function ModuleManager:create_tooltip(guiObject, text)
+                local tip = Instance.new("TextLabel")
+                tip.BackgroundColor3 = Color3.fromRGB(25, 27, 35)
+                tip.BackgroundTransparency = 0.05
+                tip.TextColor3 = Color3.fromRGB(230, 230, 240)
+                tip.Font = Enum.Font.Gotham
+                tip.TextSize = 11
+                tip.Text = text or ""
+                tip.Visible = false
+                tip.ZIndex = 300
+                tip.Size = UDim2.new(0, 0, 0, 22)
+                tip.AutomaticSize = Enum.AutomaticSize.X
+                tip.Parent = Library._ui or CoreGui
+
+                local corner = Instance.new("UICorner")
+                corner.CornerRadius = UDim.new(0, 5)
+                corner.Parent = tip
+
+                local pad = Instance.new("UIPadding")
+                pad.PaddingLeft = UDim.new(0, 8)
+                pad.PaddingRight = UDim.new(0, 8)
+                pad.Parent = tip
+
+                local stroke = Instance.new("UIStroke")
+                stroke.Color = CurrentTheme.Stroke
+                stroke.Transparency = 0.4
+                stroke.Parent = tip
+
+                guiObject.MouseEnter:Connect(function()
+                    tip.Visible = true
+                end)
+                guiObject.MouseLeave:Connect(function()
+                    tip.Visible = false
+                end)
+                RunService.RenderStepped:Connect(function()
+                    if tip.Visible then
+                        tip.Position = UDim2.fromOffset(mouse.X + 14, mouse.Y + 12)
+                    end
+                end)
+
+                return tip
+            end
+
             return ModuleManager
         end
 
@@ -3592,7 +3778,11 @@ function Library:create_ui()
     end
 
     Connections['library_visiblity'] = UserInputService.InputBegan:Connect(function(input: InputObject, process: boolean)
-        if input.KeyCode ~= Enum.KeyCode.Insert then
+        local toggleKey = GG.ToggleKey or Enum.KeyCode.Insert
+        if typeof(toggleKey) == "string" then
+            toggleKey = Enum.KeyCode[toggleKey] or Enum.KeyCode.Insert
+        end
+        if input.KeyCode ~= toggleKey then
             return
         end
 
