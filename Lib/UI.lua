@@ -1,4 +1,26 @@
+--[[
+    ====================== CUSTOM ======================
+    Viết ở ngoài trước khi load UI:
 
+    getgenv().GG = {
+        Theme = "Light",                    -- "Light" | "Dark"
+        SelectedLanguage = "en",
+
+        -- Custom màu chữ
+        TextColor = Color3.fromRGB(30, 30, 40),          -- chữ chính
+        TextSecondaryColor = Color3.fromRGB(90, 90, 110), -- chữ phụ
+
+        -- Custom accent
+        AccentColor = Color3.fromRGB(99, 102, 241),
+
+        -- Galactic Text (chữ hiệu ứng)
+        GalacticText = true,                -- bật/tắt
+        GalacticColor1 = Color3.fromRGB(99, 102, 241),   -- màu 1
+        GalacticColor2 = Color3.fromRGB(236, 72, 153),   -- màu 2 (hồng)
+        GalacticSpeed = 1.5,                -- tốc độ chạy gradient
+    }
+    ====================================================
+]]
 
 getgenv().GG = getgenv().GG or {}
 
@@ -3208,7 +3230,260 @@ function Library:create_ui()
                 end;
             
                 return FeatureContainer
-            end                    
+            end
+
+            -- ===================== Button =====================
+            function ModuleManager:create_button(settings: any)
+                LayoutOrderModule = LayoutOrderModule + 1
+
+                if self._size == 0 then self._size = 11 end
+                self._size += 28
+
+                if ModuleManager._state then
+                    Module.Size = UDim2.fromOffset(241, 93 + self._size)
+                end
+                Options.Size = UDim2.fromOffset(241, self._size)
+
+                local Button = Instance.new("TextButton")
+                Button.Size = UDim2.new(0, 207, 0, 26)
+                Button.BackgroundColor3 = CurrentTheme.Accent
+                Button.BackgroundTransparency = 0.15
+                Button.AutoButtonColor = false
+                Button.Font = Enum.Font.GothamBold
+                Button.TextSize = 12
+                Button.TextColor3 = Color3.fromRGB(255, 255, 255)
+                Button.Text = settings.title or "Button"
+                Button.BorderSizePixel = 0
+                Button.LayoutOrder = LayoutOrderModule
+                Button.Parent = Options
+
+                local corner = Instance.new("UICorner")
+                corner.CornerRadius = UDim.new(0, 6)
+                corner.Parent = Button
+
+                local stroke = Instance.new("UIStroke")
+                stroke.Color = CurrentTheme.Accent
+                stroke.Transparency = 0.4
+                stroke.Parent = Button
+
+                Button.MouseEnter:Connect(function()
+                    TweenService:Create(Button, TweenInfo.new(0.2), {
+                        BackgroundTransparency = 0
+                    }):Play()
+                end)
+                Button.MouseLeave:Connect(function()
+                    TweenService:Create(Button, TweenInfo.new(0.2), {
+                        BackgroundTransparency = 0.15
+                    }):Play()
+                end)
+
+                Button.MouseButton1Click:Connect(function()
+                    if settings.callback then
+                        settings.callback()
+                    end
+                end)
+
+                return Button
+            end
+
+            -- ===================== Color Picker =====================
+            function ModuleManager:create_colorpicker(settings: any)
+                LayoutOrderModule = LayoutOrderModule + 1
+
+                if self._size == 0 then self._size = 11 end
+                self._size += 26
+
+                if ModuleManager._state then
+                    Module.Size = UDim2.fromOffset(241, 93 + self._size)
+                end
+                Options.Size = UDim2.fromOffset(241, self._size)
+
+                local defaultColor = settings.default or Color3.fromRGB(99, 102, 241)
+                if Library:flag_type(settings.flag, "table") then
+                    local t = Library._config._flags[settings.flag]
+                    if t and t.R then
+                        defaultColor = Color3.new(t.R, t.G, t.B)
+                    end
+                end
+
+                local holder = Instance.new("Frame")
+                holder.Size = UDim2.new(0, 207, 0, 22)
+                holder.BackgroundTransparency = 1
+                holder.LayoutOrder = LayoutOrderModule
+                holder.Parent = Options
+
+                local title = Instance.new("TextLabel")
+                title.Size = UDim2.new(1, -30, 1, 0)
+                title.BackgroundTransparency = 1
+                title.Font = Enum.Font.GothamSemibold
+                title.TextSize = 11
+                title.TextColor3 = CurrentTheme.TextPrimary
+                title.TextXAlignment = Enum.TextXAlignment.Left
+                title.Text = settings.title or "Color"
+                title.Parent = holder
+
+                local preview = Instance.new("TextButton")
+                preview.Size = UDim2.new(0, 22, 0, 22)
+                preview.Position = UDim2.new(1, -22, 0, 0)
+                preview.BackgroundColor3 = defaultColor
+                preview.Text = ""
+                preview.AutoButtonColor = false
+                preview.BorderSizePixel = 0
+                preview.Parent = holder
+
+                local pCorner = Instance.new("UICorner")
+                pCorner.CornerRadius = UDim.new(0, 5)
+                pCorner.Parent = preview
+
+                local pStroke = Instance.new("UIStroke")
+                pStroke.Color = CurrentTheme.Stroke
+                pStroke.Transparency = 0.3
+                pStroke.Parent = preview
+
+                -- Popup
+                local popup = Instance.new("Frame")
+                popup.Size = UDim2.new(0, 160, 0, 130)
+                popup.Position = UDim2.new(1, 8, 0, 0)
+                popup.BackgroundColor3 = CurrentTheme.Card or CurrentTheme.BackgroundSecondary
+                popup.BackgroundTransparency = 0.05
+                popup.Visible = false
+                popup.ZIndex = 50
+                popup.Parent = holder
+
+                local popCorner = Instance.new("UICorner")
+                popCorner.CornerRadius = UDim.new(0, 8)
+                popCorner.Parent = popup
+
+                local popStroke = Instance.new("UIStroke")
+                popStroke.Color = CurrentTheme.Stroke
+                popStroke.Parent = popup
+
+                -- RGB Sliders đơn giản
+                local function makeRGBSlider(name, y, channel)
+                    local lbl = Instance.new("TextLabel")
+                    lbl.Size = UDim2.new(0, 20, 0, 16)
+                    lbl.Position = UDim2.new(0, 8, 0, y)
+                    lbl.BackgroundTransparency = 1
+                    lbl.Font = Enum.Font.GothamBold
+                    lbl.TextSize = 11
+                    lbl.TextColor3 = CurrentTheme.TextPrimary
+                    lbl.Text = name
+                    lbl.ZIndex = 51
+                    lbl.Parent = popup
+
+                    local bar = Instance.new("Frame")
+                    bar.Size = UDim2.new(0, 100, 0, 8)
+                    bar.Position = UDim2.new(0, 30, 0, y + 4)
+                    bar.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+                    bar.BorderSizePixel = 0
+                    bar.ZIndex = 51
+                    bar.Parent = popup
+
+                    local barCorner = Instance.new("UICorner")
+                    barCorner.CornerRadius = UDim.new(1, 0)
+                    barCorner.Parent = bar
+
+                    local fill = Instance.new("Frame")
+                    fill.Size = UDim2.new(channel, 0, 1, 0)
+                    fill.BackgroundColor3 = CurrentTheme.Accent
+                    fill.BorderSizePixel = 0
+                    fill.ZIndex = 52
+                    fill.Parent = bar
+
+                    local fillCorner = Instance.new("UICorner")
+                    fillCorner.CornerRadius = UDim.new(1, 0)
+                    fillCorner.Parent = fill
+
+                    return bar, fill
+                end
+
+                local r, g, b = defaultColor.R, defaultColor.G, defaultColor.B
+                local rBar, rFill = makeRGBSlider("R", 10, r)
+                local gBar, gFill = makeRGBSlider("G", 35, g)
+                local bBar, bFill = makeRGBSlider("B", 60, b)
+
+                local valLabel = Instance.new("TextLabel")
+                valLabel.Size = UDim2.new(1, -16, 0, 18)
+                valLabel.Position = UDim2.new(0, 8, 0, 90)
+                valLabel.BackgroundTransparency = 1
+                valLabel.Font = Enum.Font.Gotham
+                valLabel.TextSize = 11
+                valLabel.TextColor3 = CurrentTheme.TextSecondary
+                valLabel.TextXAlignment = Enum.TextXAlignment.Left
+                valLabel.ZIndex = 51
+                valLabel.Parent = popup
+
+                local function updateColor()
+                    local c = Color3.new(r, g, b)
+                    preview.BackgroundColor3 = c
+                    rFill.Size = UDim2.new(r, 0, 1, 0)
+                    gFill.Size = UDim2.new(g, 0, 1, 0)
+                    bFill.Size = UDim2.new(b, 0, 1, 0)
+                    valLabel.Text = string.format("R:%d G:%d B:%d", math.floor(r*255), math.floor(g*255), math.floor(b*255))
+
+                    Library._config._flags[settings.flag] = { R = r, G = g, B = b }
+                    Config:save(game.GameId, Library._config)
+
+                    if settings.callback then
+                        settings.callback(c)
+                    end
+                end
+                updateColor()
+
+                local function bindBar(bar, setChannel)
+                    bar.InputBegan:Connect(function(input)
+                        if input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
+                        local moveConn, endConn
+                        local function update()
+                            local rel = math.clamp((mouse.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
+                            setChannel(rel)
+                            updateColor()
+                        end
+                        update()
+                        moveConn = mouse.Move:Connect(update)
+                        endConn = UserInputService.InputEnded:Connect(function(inp)
+                            if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+                                moveConn:Disconnect()
+                                endConn:Disconnect()
+                            end
+                        end)
+                    end)
+                end
+
+                bindBar(rBar, function(v) r = v end)
+                bindBar(gBar, function(v) g = v end)
+                bindBar(bBar, function(v) b = v end)
+
+                preview.MouseButton1Click:Connect(function()
+                    popup.Visible = not popup.Visible
+                end)
+
+                -- click ra ngoài thì đóng (đơn giản)
+                UserInputService.InputBegan:Connect(function(input)
+                    if not popup.Visible then return end
+                    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                        local pos = input.Position
+                        local abs = popup.AbsolutePosition
+                        local size = popup.AbsoluteSize
+                        local inPopup = pos.X >= abs.X and pos.X <= abs.X + size.X and pos.Y >= abs.Y and pos.Y <= abs.Y + size.Y
+                        local inPreview = pos.X >= preview.AbsolutePosition.X and pos.X <= preview.AbsolutePosition.X + preview.AbsoluteSize.X
+                            and pos.Y >= preview.AbsolutePosition.Y and pos.Y <= preview.AbsolutePosition.Y + preview.AbsoluteSize.Y
+                        if not inPopup and not inPreview then
+                            popup.Visible = false
+                        end
+                    end
+                end)
+
+                return {
+                    Set = function(_, color)
+                        r, g, b = color.R, color.G, color.B
+                        updateColor()
+                    end,
+                    Get = function()
+                        return Color3.new(r, g, b)
+                    end
+                }
+            end
 
             return ModuleManager
         end
