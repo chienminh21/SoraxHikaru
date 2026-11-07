@@ -6,45 +6,45 @@ local combat_tab = main:create_tab("Combat", "rbxassetid://76499042599127")
 local utility_tab = main:create_tab("Utility", "rbxassetid://126017907477623")
 -- Đổi theme (trước khi tạo UI)
 getgenv().GG = {
-    Theme = "Light",                          -- "Light" hoặc "Dark"
+    Theme = "Light",                         
     
     -- Custom màu chữ
-    TextColor = Color3.fromRGB(255, 255, 255),           -- chữ chính
-    TextSecondaryColor = Color3.fromRGB(0, 0, 0), -- chữ phụ
+    TextColor = Color3.fromRGB(255, 255, 255),           
+    TextSecondaryColor = Color3.fromRGB(0, 0, 0), 
     
     -- Custom accent
     AccentColor = Color3.fromRGB(99, 102, 241),
     
     -- Galactic Text 
-    GalacticText = true,                             -- bật/tắt
-    GalacticColor1 = Color3.fromRGB(99, 102, 241),   -- màu 1 (tím)
-    GalacticColor2 = Color3.fromRGB(236, 72, 153),   -- màu 2 (hồng)
-    GalacticSpeed = 0.1,                             -- tốc độ (càng cao càng nhanh)
+    GalacticText = true,                             
+    GalacticColor1 = Color3.fromRGB(99, 102, 241),   
+    GalacticColor2 = Color3.fromRGB(236, 72, 153),   
+    GalacticSpeed = 0.1,                             
 }
 -- Combat Module
 local aimbot = combat_tab:create_module({
-  title = "Aimbot",
-  flag = "Aimbot",
-  description = "Locks onto enemies",
+  title = "Toggle left",
+  flag = "Toggle1",
+  description = "this is desc",
   section = "left",
   callback = function(value)
-    print("Aimbot enabled:", value)
+    print(" enabled:", value)
     Library.SendNotification({title = "Aimbot", text = value and "Enabled!" or "Disabled!", duration = 3})
   end
 })
 
 aimbot:create_dropdown({
-  title = "Target Part",
-  flag = "Target_Part",
-  options = {"Head", "Torso", "Random"},
+  title = "dropdown left",
+  flag = "dropdownleft",
+  options = {"1", "2", "3"},
   multi_dropdown = false,
   maximum_options = 1,
   callback = function(value) print("Targeting:", value) end
 })
 
 aimbot:create_slider({
-  title = "Aimbot Sensitivity",
-  flag = "Aimbot_Sensitivity",
+  title = "slider Left",
+  flag = "sliderleft",
   maximum_value = 100,
   minimum_value = 10,
   value = 50,
@@ -53,30 +53,46 @@ aimbot:create_slider({
 })
 
 aimbot:create_checkbox({
-  title = "Silent Aim",
-  flag = "Silent_Aim",
+  title = "check box",
+  flag = "checkbox",
   callback = function(value) print("Silent Aim:", value) end
 })
-
+local Right = combat_tab:create_module({
+  title = "Toggle Right",
+  flag = "Toggle5",
+  description = "this is desc",
+  section = "right",
+  callback = function(value)
+    print(" enabled:", value)
+    Library.SendNotification({title = "on", text = value and "Enabled!" or "Disabled!", duration = 3})
+  end
+})
 -- Utility Module
-local speedhack = utility_tab:create_module({
-  title = "Speed Hack",
-  flag = "Speed_Hack",
+local ToggleLeft = utility_tab:create_module({
+  title = "Toggle",
+  flag = "Input",
+  description = "just Toggle no slider",
+  section = "left",
+  callback = function(value) print("Speed Hack:", value) end
+})
+local Toggleright = utility_tab:create_module({
+  title = "Toggle and input",
+  flag = "Input",
   description = "Increases player speed",
   section = "right",
   callback = function(value) print("Speed Hack:", value) end
 })
 
-speedhack:create_paragraph({
+Toggleright:create_paragraph({
   title = "Info",
-  text = "Use responsibly to avoid detection."
+  text = "hello this is info"
 })
 
-speedhack:create_textbox({
-  title = "Speed Value",
-  placeholder = "Enter speed...",
-  flag = "Speed_Value",
-  callback = function(text) print("Speed set to:", text) end
+Toggleright:create_textbox({
+  title = "input",
+  placeholder = "Enter...",
+  flag = "input",
+  callback = function(text) print(" set to:", text) end
 })
 
 main:load()
