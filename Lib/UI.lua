@@ -3288,6 +3288,7 @@ function Library:create_ui()
             end
 
             -- ===================== Color Picker =====================
+            -- ===================== Color Picker (HSV style) =====================
             function ModuleManager:create_colorpicker(settings: any)
                 LayoutOrderModule = LayoutOrderModule + 1
 
@@ -3307,6 +3308,8 @@ function Library:create_ui()
                     end
                 end
 
+                local h, s, v = defaultColor:ToHSV()
+
                 local holder = Instance.new("Frame")
                 holder.Size = UDim2.new(0, 207, 0, 22)
                 holder.BackgroundTransparency = 1
@@ -3314,7 +3317,7 @@ function Library:create_ui()
                 holder.Parent = Options
 
                 local title = Instance.new("TextLabel")
-                title.Size = UDim2.new(1, -30, 1, 0)
+                title.Size = UDim2.new(1, -36, 1, 0)
                 title.BackgroundTransparency = 1
                 title.Font = Enum.Font.GothamSemibold
                 title.TextSize = 11
@@ -3323,9 +3326,21 @@ function Library:create_ui()
                 title.Text = settings.title or "Color"
                 title.Parent = holder
 
+                local arrow = Instance.new("TextLabel")
+                arrow.Size = UDim2.new(0, 14, 0, 14)
+                arrow.Position = UDim2.new(1, -36, 0.5, 0)
+                arrow.AnchorPoint = Vector2.new(0, 0.5)
+                arrow.BackgroundTransparency = 1
+                arrow.Font = Enum.Font.GothamBold
+                arrow.TextSize = 10
+                arrow.TextColor3 = CurrentTheme.TextSecondary
+                arrow.Text = "▾"
+                arrow.Parent = holder
+
                 local preview = Instance.new("TextButton")
-                preview.Size = UDim2.new(0, 22, 0, 22)
-                preview.Position = UDim2.new(1, -22, 0, 0)
+                preview.Size = UDim2.new(0, 22, 0, 18)
+                preview.Position = UDim2.new(1, -22, 0.5, 0)
+                preview.AnchorPoint = Vector2.new(0, 0.5)
                 preview.BackgroundColor3 = defaultColor
                 preview.Text = ""
                 preview.AutoButtonColor = false
@@ -3341,15 +3356,7 @@ function Library:create_ui()
                 pStroke.Transparency = 0.3
                 pStroke.Parent = preview
 
-                -- Popup (parent ra ngoài để không bị ClipsDescendants cắt)
-                local popup = Instance.new("Frame")
-                popup.Size = UDim2.new(0, 160, 0, 130)
-                popup.BackgroundColor3 = CurrentTheme.Card or CurrentTheme.BackgroundSecondary
-                popup.BackgroundTransparency = 0.05
-                popup.Visible = false
-                popup.ZIndex = 200
-
-                -- ScreenGui riêng để popup luôn nổi trên cùng, không bị cắt
+                -- Popup ScreenGui
                 local popupGui = Instance.new("ScreenGui")
                 popupGui.Name = "SxH_ColorPopup"
                 popupGui.ResetOnSpawn = false
@@ -3360,148 +3367,262 @@ function Library:create_ui()
                     popupGui.Parent = (gethui and gethui()) or CoreGui
                 end)
                 if not popupGui.Parent then popupGui.Parent = CoreGui end
+
+                local popup = Instance.new("Frame")
+                popup.Size = UDim2.new(0, 200, 0, 180)
+                popup.BackgroundColor3 = Color3.fromRGB(22, 24, 32)
+                popup.BackgroundTransparency = 0.05
+                popup.Visible = false
+                popup.ZIndex = 200
                 popup.Parent = popupGui
 
                 local popCorner = Instance.new("UICorner")
-                popCorner.CornerRadius = UDim.new(0, 8)
+                popCorner.CornerRadius = UDim.new(0, 10)
                 popCorner.Parent = popup
 
                 local popStroke = Instance.new("UIStroke")
-                popStroke.Color = CurrentTheme.Stroke
+                popStroke.Color = Color3.fromRGB(60, 65, 80)
+                popStroke.Transparency = 0.3
                 popStroke.Parent = popup
 
-                -- RGB Sliders đơn giản
-                local function makeRGBSlider(name, y, channel)
-                    local lbl = Instance.new("TextLabel")
-                    lbl.Size = UDim2.new(0, 20, 0, 16)
-                    lbl.Position = UDim2.new(0, 8, 0, y)
-                    lbl.BackgroundTransparency = 1
-                    lbl.Font = Enum.Font.GothamBold
-                    lbl.TextSize = 11
-                    lbl.TextColor3 = CurrentTheme.TextPrimary
-                    lbl.Text = name
-                    lbl.ZIndex = 51
-                    lbl.Parent = popup
+                -- SV Panel (saturation / value)
+                local svPanel = Instance.new("ImageButton")
+                svPanel.Name = "SV"
+                svPanel.Size = UDim2.new(0, 176, 0, 110)
+                svPanel.Position = UDim2.new(0, 12, 0, 12)
+                svPanel.BackgroundColor3 = Color3.fromHSV(h, 1, 1)
+                svPanel.AutoButtonColor = false
+                svPanel.BorderSizePixel = 0
+                svPanel.ZIndex = 201
+                svPanel.Parent = popup
 
-                    local bar = Instance.new("Frame")
-                    bar.Size = UDim2.new(0, 100, 0, 8)
-                    bar.Position = UDim2.new(0, 30, 0, y + 4)
-                    bar.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
-                    bar.BorderSizePixel = 0
-                    bar.ZIndex = 51
-                    bar.Parent = popup
+                local svCorner = Instance.new("UICorner")
+                svCorner.CornerRadius = UDim.new(0, 8)
+                svCorner.Parent = svPanel
 
-                    local barCorner = Instance.new("UICorner")
-                    barCorner.CornerRadius = UDim.new(1, 0)
-                    barCorner.Parent = bar
+                -- White to transparent gradient (saturation axis)
+                local svWhite = Instance.new("Frame")
+                svWhite.Size = UDim2.new(1, 0, 1, 0)
+                svWhite.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+                svWhite.BorderSizePixel = 0
+                svWhite.ZIndex = 202
+                svWhite.Parent = svPanel
 
-                    local fill = Instance.new("Frame")
-                    fill.Size = UDim2.new(channel, 0, 1, 0)
-                    fill.BackgroundColor3 = CurrentTheme.Accent
-                    fill.BorderSizePixel = 0
-                    fill.ZIndex = 52
-                    fill.Parent = bar
+                local svWhiteCorner = Instance.new("UICorner")
+                svWhiteCorner.CornerRadius = UDim.new(0, 8)
+                svWhiteCorner.Parent = svWhite
 
-                    local fillCorner = Instance.new("UICorner")
-                    fillCorner.CornerRadius = UDim.new(1, 0)
-                    fillCorner.Parent = fill
+                local svWhiteGrad = Instance.new("UIGradient")
+                svWhiteGrad.Transparency = NumberSequence.new({
+                    NumberSequenceKeypoint.new(0, 0),
+                    NumberSequenceKeypoint.new(1, 1)
+                })
+                svWhiteGrad.Parent = svWhite
 
-                    return bar, fill
+                -- Black gradient (value axis)
+                local svBlack = Instance.new("Frame")
+                svBlack.Size = UDim2.new(1, 0, 1, 0)
+                svBlack.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+                svBlack.BorderSizePixel = 0
+                svBlack.ZIndex = 203
+                svBlack.Parent = svPanel
+
+                local svBlackCorner = Instance.new("UICorner")
+                svBlackCorner.CornerRadius = UDim.new(0, 8)
+                svBlackCorner.Parent = svBlack
+
+                local svBlackGrad = Instance.new("UIGradient")
+                svBlackGrad.Rotation = 90
+                svBlackGrad.Transparency = NumberSequence.new({
+                    NumberSequenceKeypoint.new(0, 1),
+                    NumberSequenceKeypoint.new(1, 0)
+                })
+                svBlackGrad.Parent = svBlack
+
+                -- SV cursor
+                local svCursor = Instance.new("Frame")
+                svCursor.Size = UDim2.new(0, 12, 0, 12)
+                svCursor.AnchorPoint = Vector2.new(0.5, 0.5)
+                svCursor.Position = UDim2.new(s, 0, 1 - v, 0)
+                svCursor.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+                svCursor.BorderSizePixel = 0
+                svCursor.ZIndex = 204
+                svCursor.Parent = svPanel
+
+                local svCursorCorner = Instance.new("UICorner")
+                svCursorCorner.CornerRadius = UDim.new(1, 0)
+                svCursorCorner.Parent = svCursor
+
+                local svCursorStroke = Instance.new("UIStroke")
+                svCursorStroke.Color = Color3.fromRGB(40, 40, 40)
+                svCursorStroke.Thickness = 1.5
+                svCursorStroke.Parent = svCursor
+
+                -- Hue slider
+                local hueBar = Instance.new("ImageButton")
+                hueBar.Name = "Hue"
+                hueBar.Size = UDim2.new(0, 176, 0, 14)
+                hueBar.Position = UDim2.new(0, 12, 0, 132)
+                hueBar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+                hueBar.AutoButtonColor = false
+                hueBar.BorderSizePixel = 0
+                hueBar.ZIndex = 201
+                hueBar.Parent = popup
+
+                local hueCorner = Instance.new("UICorner")
+                hueCorner.CornerRadius = UDim.new(1, 0)
+                hueCorner.Parent = hueBar
+
+                local hueGrad = Instance.new("UIGradient")
+                hueGrad.Color = ColorSequence.new({
+                    ColorSequenceKeypoint.new(0.00, Color3.fromRGB(255, 0, 0)),
+                    ColorSequenceKeypoint.new(0.17, Color3.fromRGB(255, 255, 0)),
+                    ColorSequenceKeypoint.new(0.33, Color3.fromRGB(0, 255, 0)),
+                    ColorSequenceKeypoint.new(0.50, Color3.fromRGB(0, 255, 255)),
+                    ColorSequenceKeypoint.new(0.67, Color3.fromRGB(0, 0, 255)),
+                    ColorSequenceKeypoint.new(0.83, Color3.fromRGB(255, 0, 255)),
+                    ColorSequenceKeypoint.new(1.00, Color3.fromRGB(255, 0, 0)),
+                })
+                hueGrad.Parent = hueBar
+
+                local hueCursor = Instance.new("Frame")
+                hueCursor.Size = UDim2.new(0, 6, 0, 18)
+                hueCursor.AnchorPoint = Vector2.new(0.5, 0.5)
+                hueCursor.Position = UDim2.new(h, 0, 0.5, 0)
+                hueCursor.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+                hueCursor.BorderSizePixel = 0
+                hueCursor.ZIndex = 202
+                hueCursor.Parent = hueBar
+
+                local hueCursorCorner = Instance.new("UICorner")
+                hueCursorCorner.CornerRadius = UDim.new(1, 0)
+                hueCursorCorner.Parent = hueCursor
+
+                local hueCursorStroke = Instance.new("UIStroke")
+                hueCursorStroke.Color = Color3.fromRGB(30, 30, 30)
+                hueCursorStroke.Thickness = 1
+                hueCursorStroke.Parent = hueCursor
+
+                -- Hex label
+                local hexLabel = Instance.new("TextLabel")
+                hexLabel.Size = UDim2.new(1, -24, 0, 16)
+                hexLabel.Position = UDim2.new(0, 12, 0, 154)
+                hexLabel.BackgroundTransparency = 1
+                hexLabel.Font = Enum.Font.Gotham
+                hexLabel.TextSize = 11
+                hexLabel.TextColor3 = Color3.fromRGB(180, 185, 200)
+                hexLabel.TextXAlignment = Enum.TextXAlignment.Left
+                hexLabel.ZIndex = 201
+                hexLabel.Parent = popup
+
+                local function toHex(color)
+                    return string.format("#%02X%02X%02X",
+                        math.floor(color.R * 255 + 0.5),
+                        math.floor(color.G * 255 + 0.5),
+                        math.floor(color.B * 255 + 0.5))
                 end
 
-                local r, g, b = defaultColor.R, defaultColor.G, defaultColor.B
-                local rBar, rFill = makeRGBSlider("R", 10, r)
-                local gBar, gFill = makeRGBSlider("G", 35, g)
-                local bBar, bFill = makeRGBSlider("B", 60, b)
-
-                local valLabel = Instance.new("TextLabel")
-                valLabel.Size = UDim2.new(1, -16, 0, 18)
-                valLabel.Position = UDim2.new(0, 8, 0, 90)
-                valLabel.BackgroundTransparency = 1
-                valLabel.Font = Enum.Font.Gotham
-                valLabel.TextSize = 11
-                valLabel.TextColor3 = CurrentTheme.TextSecondary
-                valLabel.TextXAlignment = Enum.TextXAlignment.Left
-                valLabel.ZIndex = 51
-                valLabel.Parent = popup
-
-                local function updateColor()
-                    local c = Color3.new(r, g, b)
+                local function applyColor(save)
+                    local c = Color3.fromHSV(h, s, v)
                     preview.BackgroundColor3 = c
-                    rFill.Size = UDim2.new(r, 0, 1, 0)
-                    gFill.Size = UDim2.new(g, 0, 1, 0)
-                    bFill.Size = UDim2.new(b, 0, 1, 0)
-                    valLabel.Text = string.format("R:%d G:%d B:%d", math.floor(r*255), math.floor(g*255), math.floor(b*255))
+                    svPanel.BackgroundColor3 = Color3.fromHSV(h, 1, 1)
+                    svCursor.Position = UDim2.new(s, 0, 1 - v, 0)
+                    hueCursor.Position = UDim2.new(h, 0, 0.5, 0)
+                    hexLabel.Text = toHex(c)
 
-                    Library._config._flags[settings.flag] = { R = r, G = g, B = b }
-                    Config:save(game.GameId, Library._config)
-
-                    if settings.callback then
-                        settings.callback(c)
+                    if save ~= false then
+                        Library._config._flags[settings.flag] = { R = c.R, G = c.G, B = c.B }
+                        Config:save(game.GameId, Library._config)
+                        if settings.callback then
+                            settings.callback(c)
+                        end
                     end
                 end
-                updateColor()
+                applyColor(false)
 
-                local function bindBar(bar, setChannel)
-                    bar.InputBegan:Connect(function(input)
-                        if input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
-                        local moveConn, endConn
-                        local function update()
-                            local rel = math.clamp((mouse.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
-                            setChannel(rel)
-                            updateColor()
+                -- Drag helpers
+                local function bindDrag(btn, onMove)
+                    local dragging = false
+                    btn.InputBegan:Connect(function(input)
+                        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                            dragging = true
+                            onMove()
                         end
-                        update()
-                        moveConn = mouse.Move:Connect(update)
-                        endConn = UserInputService.InputEnded:Connect(function(inp)
-                            if inp.UserInputType == Enum.UserInputType.MouseButton1 then
-                                moveConn:Disconnect()
-                                endConn:Disconnect()
+                    end)
+                    UserInputService.InputChanged:Connect(function(input)
+                        if not dragging then return end
+                        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+                            onMove()
+                        end
+                    end)
+                    UserInputService.InputEnded:Connect(function(input)
+                        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                            if dragging then
+                                dragging = false
+                                applyColor(true)
                             end
-                        end)
+                        end
                     end)
                 end
 
-                bindBar(rBar, function(v) r = v end)
-                bindBar(gBar, function(v) g = v end)
-                bindBar(bBar, function(v) b = v end)
-
-                preview.MouseButton1Click:Connect(function()
-                    if popup.Visible then
-                        popup.Visible = false
-                        return
-                    end
-                    -- đặt popup cạnh ô màu (không bị menu cắt)
-                    local abs = preview.AbsolutePosition
-                    local size = preview.AbsoluteSize
-                    popup.Position = UDim2.fromOffset(abs.X + size.X + 8, abs.Y)
-                    popup.Visible = true
+                bindDrag(svPanel, function()
+                    local relX = math.clamp((mouse.X - svPanel.AbsolutePosition.X) / svPanel.AbsoluteSize.X, 0, 1)
+                    local relY = math.clamp((mouse.Y - svPanel.AbsolutePosition.Y) / svPanel.AbsoluteSize.Y, 0, 1)
+                    s = relX
+                    v = 1 - relY
+                    applyColor(false)
                 end)
 
-                -- click ra ngoài thì đóng
+                bindDrag(hueBar, function()
+                    local relX = math.clamp((mouse.X - hueBar.AbsolutePosition.X) / hueBar.AbsoluteSize.X, 0, 1)
+                    h = relX
+                    applyColor(false)
+                end)
+
+                local function openPopup()
+                    local abs = preview.AbsolutePosition
+                    local size = preview.AbsoluteSize
+                    popup.Position = UDim2.fromOffset(abs.X - 200 + size.X, abs.Y + size.Y + 6)
+                    popup.Visible = true
+                    arrow.Text = "▴"
+                end
+
+                local function closePopup()
+                    popup.Visible = false
+                    arrow.Text = "▾"
+                end
+
+                preview.MouseButton1Click:Connect(function()
+                    if popup.Visible then closePopup() else openPopup() end
+                end)
+
+                title.InputBegan:Connect(function(input)
+                    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                        if popup.Visible then closePopup() else openPopup() end
+                    end
+                end)
+
                 UserInputService.InputBegan:Connect(function(input)
                     if not popup.Visible then return end
                     if input.UserInputType == Enum.UserInputType.MouseButton1 then
                         local pos = input.Position
-                        local pAbs = popup.AbsolutePosition
-                        local pSize = popup.AbsoluteSize
+                        local pAbs, pSize = popup.AbsolutePosition, popup.AbsoluteSize
                         local inPopup = pos.X >= pAbs.X and pos.X <= pAbs.X + pSize.X and pos.Y >= pAbs.Y and pos.Y <= pAbs.Y + pSize.Y
-                        local pr = preview.AbsolutePosition
-                        local ps = preview.AbsoluteSize
+                        local pr, ps = preview.AbsolutePosition, preview.AbsoluteSize
                         local inPreview = pos.X >= pr.X and pos.X <= pr.X + ps.X and pos.Y >= pr.Y and pos.Y <= pr.Y + ps.Y
                         if not inPopup and not inPreview then
-                            popup.Visible = false
+                            closePopup()
                         end
                     end
                 end)
 
                 return {
                     Set = function(_, color)
-                        r, g, b = color.R, color.G, color.B
-                        updateColor()
+                        h, s, v = color:ToHSV()
+                        applyColor(true)
                     end,
                     Get = function()
-                        return Color3.new(r, g, b)
+                        return Color3.fromHSV(h, s, v)
                     end
                 }
             end
