@@ -970,8 +970,8 @@ function Library:create_ui()
     -- ===================== Search Bar =====================
     local SearchContainer = Instance.new("Frame")
     SearchContainer.Name = "SearchContainer"
-    SearchContainer.Size = UDim2.new(0, 220, 0, 28)
-    SearchContainer.Position = UDim2.new(0, 165, 0, 12)
+    SearchContainer.Size = UDim2.new(0, 240, 0, 26)
+    SearchContainer.Position = UDim2.new(0, 175, 0, 8)  -- đẩy lên cao hơn
     SearchContainer.BackgroundColor3 = CurrentTheme.Card or CurrentTheme.BackgroundSecondary
     SearchContainer.BackgroundTransparency = 0.15
     SearchContainer.BorderSizePixel = 0
