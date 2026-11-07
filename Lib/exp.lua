@@ -1,4 +1,4 @@
--- Custom settings (set BEFORE loading the UI)
+-- Custom settings 
 getgenv().GG = {
     Theme = "Dark",
     UIName = "Sora x Hikaru",
