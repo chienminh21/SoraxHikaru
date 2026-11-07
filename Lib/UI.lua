@@ -1,4 +1,5 @@
 getgenv().GG = {
+    SelectedLanguage = "en", -- "en" or "th"
     Language = {
         CheckboxEnabled = "Enabled",
         CheckboxDisabled = "Disabled",
@@ -18,14 +19,13 @@ getgenv().GG = {
     }
 }
 
--- Replace the SelectedLanguage with a reference to GG.Language
-local SelectedLanguage = GG.Language
+local SelectedLanguage = GG.SelectedLanguage or "en"
 
 function convertStringToTable(inputString)
     local result = {}
     for value in string.gmatch(inputString, "([^,]+)") do
         local trimmedValue = value:match("^%s*(.-)%s*$")
-        tablein(result, trimmedValue)
+        table.insert(result, trimmedValue)
     end
 
     return result
@@ -1883,7 +1883,7 @@ function Library:create_ui()
                 Slider.LayoutOrder = LayoutOrderModule
                 
                 local TextLabel = Instance.new('TextLabel')
-                if GG.SelectedLanguage == "th" then
+                if SelectedLanguage == "th" then
                     TextLabel.FontFace = Font.new("rbxasset://fonts/families/NotoSansThai.json", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
                     TextLabel.TextSize = 13;
                 else
@@ -2040,6 +2040,217 @@ function Library:create_ui()
                 return SliderManager
             end
 
+            function ModuleManager:create_range_slider(settings: any)
+                LayoutOrderModule = LayoutOrderModule + 1
+
+                local RangeSliderManager = {
+                    min_value = settings.min_value or settings.minimum_value or 0,
+                    max_value = settings.max_value or settings.maximum_value or 100,
+                }
+
+                if self._size == 0 then
+                    self._size = 11
+                end
+                self._size += 27
+
+                if ModuleManager._state then
+                    Module.Size = UDim2.fromOffset(241, 93 + self._size)
+                end
+                Options.Size = UDim2.fromOffset(241, self._size)
+
+                local Slider = Instance.new('TextButton')
+                Slider.FontFace = Font.new('rbxasset://fonts/families/SourceSansPro.json', Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+                Slider.TextSize = 14
+                Slider.TextColor3 = Color3.fromRGB(0, 0, 0)
+                Slider.BorderColor3 = Color3.fromRGB(0, 0, 0)
+                Slider.Text = ''
+                Slider.AutoButtonColor = false
+                Slider.BackgroundTransparency = 1
+                Slider.Name = 'RangeSlider'
+                Slider.Size = UDim2.new(0, 207, 0, 22)
+                Slider.BorderSizePixel = 0
+                Slider.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+                Slider.Parent = Options
+                Slider.LayoutOrder = LayoutOrderModule
+
+                local TextLabel = Instance.new('TextLabel')
+                if SelectedLanguage == "th" then
+                    TextLabel.FontFace = Font.new("rbxasset://fonts/families/NotoSansThai.json", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+                    TextLabel.TextSize = 13
+                else
+                    TextLabel.FontFace = Font.new('rbxasset://fonts/families/GothamSSm.json', Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+                    TextLabel.TextSize = 11
+                end
+                TextLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+                TextLabel.TextTransparency = 0.2
+                TextLabel.Text = settings.title or "Range"
+                TextLabel.Size = UDim2.new(0, 153, 0, 13)
+                TextLabel.Position = UDim2.new(0, 0, 0.05, 0)
+                TextLabel.BackgroundTransparency = 1
+                TextLabel.TextXAlignment = Enum.TextXAlignment.Left
+                TextLabel.BorderSizePixel = 0
+                TextLabel.Parent = Slider
+
+                local Drag = Instance.new('Frame')
+                Drag.BorderColor3 = Color3.fromRGB(0, 0, 0)
+                Drag.AnchorPoint = Vector2.new(0.5, 1)
+                Drag.BackgroundTransparency = 0.9
+                Drag.Position = UDim2.new(0.5, 0, 0.95, 0)
+                Drag.Name = 'Drag'
+                Drag.Size = UDim2.new(0, 207, 0, 4)
+                Drag.BorderSizePixel = 0
+                Drag.BackgroundColor3 = Color3.fromRGB(152, 181, 255)
+                Drag.Parent = Slider
+
+                local UICorner = Instance.new('UICorner')
+                UICorner.CornerRadius = UDim.new(1, 0)
+                UICorner.Parent = Drag
+
+                local Fill = Instance.new('Frame')
+                Fill.BorderColor3 = Color3.fromRGB(0, 0, 0)
+                Fill.AnchorPoint = Vector2.new(0, 0.5)
+                Fill.BackgroundTransparency = 0.5
+                Fill.Position = UDim2.new(0, 0, 0.5, 0)
+                Fill.Name = 'Fill'
+                Fill.Size = UDim2.new(0, 0, 0, 4)
+                Fill.BorderSizePixel = 0
+                Fill.BackgroundColor3 = Color3.fromRGB(152, 181, 255)
+                Fill.Parent = Drag
+
+                local UICornerFill = Instance.new('UICorner')
+                UICornerFill.CornerRadius = UDim.new(0, 3)
+                UICornerFill.Parent = Fill
+
+                local MinThumb = Instance.new('Frame')
+                MinThumb.AnchorPoint = Vector2.new(0.5, 0.5)
+                MinThumb.Name = 'MinThumb'
+                MinThumb.Position = UDim2.new(0, 0, 0.5, 0)
+                MinThumb.Size = UDim2.new(0, 8, 0, 8)
+                MinThumb.BorderSizePixel = 0
+                MinThumb.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+                MinThumb.Parent = Drag
+
+                local MinCorner = Instance.new('UICorner')
+                MinCorner.CornerRadius = UDim.new(1, 0)
+                MinCorner.Parent = MinThumb
+
+                local MaxThumb = Instance.new('Frame')
+                MaxThumb.AnchorPoint = Vector2.new(0.5, 0.5)
+                MaxThumb.Name = 'MaxThumb'
+                MaxThumb.Position = UDim2.new(1, 0, 0.5, 0)
+                MaxThumb.Size = UDim2.new(0, 8, 0, 8)
+                MaxThumb.BorderSizePixel = 0
+                MaxThumb.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+                MaxThumb.Parent = Drag
+
+                local MaxCorner = Instance.new('UICorner')
+                MaxCorner.CornerRadius = UDim.new(1, 0)
+                MaxCorner.Parent = MaxThumb
+
+                local ValueDisplay = Instance.new('TextLabel')
+                ValueDisplay.FontFace = Font.new('rbxasset://fonts/families/GothamSSm.json', Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+                ValueDisplay.TextColor3 = Color3.fromRGB(255, 255, 255)
+                ValueDisplay.TextTransparency = 0.2
+                ValueDisplay.Text = string.format("%.1f - %.1f", RangeSliderManager.min_value, RangeSliderManager.max_value)
+                ValueDisplay.Name = 'Value'
+                ValueDisplay.Size = UDim2.new(0, 80, 0, 13)
+                ValueDisplay.AnchorPoint = Vector2.new(1, 0)
+                ValueDisplay.Position = UDim2.new(1, 0, 0, 0)
+                ValueDisplay.BackgroundTransparency = 1
+                ValueDisplay.TextXAlignment = Enum.TextXAlignment.Right
+                ValueDisplay.TextSize = 10
+                ValueDisplay.Parent = Slider
+
+                local min_val = settings.minimum_value or 0
+                local max_val = settings.maximum_value or 100
+
+                function RangeSliderManager:update_positions(animate)
+                    local min_percent = math.clamp((self.min_value - min_val) / (max_val - min_val), 0, 1)
+                    local max_percent = math.clamp((self.max_value - min_val) / (max_val - min_val), 0, 1)
+
+                    if animate then
+                        TweenService:Create(MinThumb, TweenInfo.new(0.2, Enum.EasingStyle.Quint), {Position = UDim2.new(min_percent, 0, 0.5, 0)}):Play()
+                        TweenService:Create(MaxThumb, TweenInfo.new(0.2, Enum.EasingStyle.Quint), {Position = UDim2.new(max_percent, 0, 0.5, 0)}):Play()
+                        TweenService:Create(Fill, TweenInfo.new(0.2, Enum.EasingStyle.Quint), {
+                            Size = UDim2.new(max_percent - min_percent, 0, 1, 0),
+                            Position = UDim2.new(min_percent, 0, 0.5, 0)
+                        }):Play()
+                    else
+                        MinThumb.Position = UDim2.new(min_percent, 0, 0.5, 0)
+                        MaxThumb.Position = UDim2.new(max_percent, 0, 0.5, 0)
+                        Fill.Size = UDim2.new(max_percent - min_percent, 0, 1, 0)
+                        Fill.Position = UDim2.new(min_percent, 0, 0.5, 0)
+                    end
+
+                    if settings.round_number then
+                        ValueDisplay.Text = string.format("%d - %d", math.floor(self.min_value), math.floor(self.max_value))
+                    else
+                        ValueDisplay.Text = string.format("%.1f - %.1f", self.min_value, self.max_value)
+                    end
+
+                    Library._config._flags[settings.flag .. "_min"] = self.min_value
+                    Library._config._flags[settings.flag .. "_max"] = self.max_value
+                    Config:save(game.GameId, Library._config)
+
+                    if settings.callback then
+                        settings.callback(self.min_value, self.max_value)
+                    end
+                end
+
+                local active_thumb = nil
+
+                Slider.InputBegan:Connect(function(input)
+                    if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then return end
+
+                    local mouse_pos = mouse.X - Drag.AbsolutePosition.X
+                    local total_width = Drag.AbsoluteSize.X
+                    local min_pixel = ((RangeSliderManager.min_value - min_val) / (max_val - min_val)) * total_width
+                    local max_pixel = ((RangeSliderManager.max_value - min_val) / (max_val - min_val)) * total_width
+
+                    if math.abs(mouse_pos - min_pixel) < math.abs(mouse_pos - max_pixel) then
+                        active_thumb = "min"
+                    else
+                        active_thumb = "max"
+                    end
+                end)
+
+                UserInputService.InputChanged:Connect(function(input)
+                    if not active_thumb then return end
+                    if input.UserInputType ~= Enum.UserInputType.MouseMovement and input.UserInputType ~= Enum.UserInputType.Touch then return end
+
+                    local mouse_pos = math.clamp(mouse.X - Drag.AbsolutePosition.X, 0, Drag.AbsoluteSize.X)
+                    local percentage = mouse_pos / Drag.AbsoluteSize.X
+                    local new_value = min_val + (max_val - min_val) * percentage
+
+                    if active_thumb == "min" then
+                        RangeSliderManager.min_value = math.clamp(new_value, min_val, RangeSliderManager.max_value)
+                    else
+                        RangeSliderManager.max_value = math.clamp(new_value, RangeSliderManager.min_value, max_val)
+                    end
+                    RangeSliderManager:update_positions(false)
+                end)
+
+                UserInputService.InputEnded:Connect(function(input)
+                    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                        if active_thumb then
+                            RangeSliderManager:update_positions(true)
+                        end
+                        active_thumb = nil
+                    end
+                end)
+
+                if Library:flag_type(settings.flag .. "_min", "number") then
+                    RangeSliderManager.min_value = Library._config._flags[settings.flag .. "_min"]
+                    RangeSliderManager.max_value = Library._config._flags[settings.flag .. "_max"] or max_val
+                end
+
+                task.defer(function()
+                    RangeSliderManager:update_positions(true)
+                end)
+
+                return RangeSliderManager
+            end
+
             function ModuleManager:create_dropdown(settings: any)
 
                 if not settings.Order then
@@ -2091,7 +2302,7 @@ function Library:create_ui()
                 end;
                 
                 local TextLabel = Instance.new('TextLabel')
-                if GG.SelectedLanguage == "th" then
+                if SelectedLanguage == "th" then
                     TextLabel.FontFace = Font.new("rbxasset://fonts/families/NotoSansThai.json", Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
                     TextLabel.TextSize = 13;
                 else
