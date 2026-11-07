@@ -5,7 +5,22 @@ local main = Library.new()
 local combat_tab = main:create_tab("Combat", "rbxassetid://76499042599127")
 local utility_tab = main:create_tab("Utility", "rbxassetid://126017907477623")
 -- Đổi theme (trước khi tạo UI)
-getgenv().GG.Theme = "Light"  -- hoặc "Dark"
+getgenv().GG = {
+    Theme = "Light",                          -- "Light" hoặc "Dark"
+    
+    -- Custom màu chữ
+    TextColor = Color3.fromRGB(255, 255, 255),           -- chữ chính
+    TextSecondaryColor = Color3.fromRGB(0, 0, 0), -- chữ phụ
+    
+    -- Custom accent
+    AccentColor = Color3.fromRGB(99, 102, 241),
+    
+    -- Galactic Text 
+    GalacticText = true,                             -- bật/tắt
+    GalacticColor1 = Color3.fromRGB(99, 102, 241),   -- màu 1 (tím)
+    GalacticColor2 = Color3.fromRGB(236, 72, 153),   -- màu 2 (hồng)
+    GalacticSpeed = 0.1,                             -- tốc độ (càng cao càng nhanh)
+}
 -- Combat Module
 local aimbot = combat_tab:create_module({
   title = "Aimbot",
