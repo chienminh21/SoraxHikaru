@@ -3,10 +3,10 @@
 getgenv().GG = {
     UIName = "Sora x Hikaru",
     Version = "v2.0",
-    Theme = "Dark",
+    Theme = "Light",
     Transparency = 0.15,
     ToggleKey = Enum.KeyCode.Insert,
-    NotifyMode = "new",
+    NotifyMode = "old",
     Watermark = true,
     ImageBackground = "",
     ImageBackgroundStyle = "Crop",
