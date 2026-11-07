@@ -132,13 +132,13 @@ local SettingsLeft = tab2:create_module({
 })
 
 SettingsLeft:create_dropdown({
-    title = "Theme",
-    flag = "theme_mode",
-    options = {"Dark", "Light"},
+    title = "1",
+    flag = "dropdown_mode",
+    options = {"1", "2"},
     multi_dropdown = false,
     maximum_options = 2,
     callback = function(value)
-        if Library.SetTheme then Library.SetTheme(value) else print("Theme:", value) end
+        
     end
 })
 
