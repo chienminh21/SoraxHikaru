@@ -1674,12 +1674,40 @@ function Library:create_ui()
             UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
             UIListLayout.Parent = Options
 
+            UIListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+                if ModuleManager._state then
+                    ModuleManager:refresh_size()
+                end
+            end)
+
+            local function get_options_height()
+                local layout = Options:FindFirstChildOfClass("UIListLayout")
+                local contentY = 0
+                if layout then
+                    contentY = layout.AbsoluteContentSize.Y
+                end
+                if contentY < 1 then
+                    contentY = ModuleManager._size or 0
+                end
+                return contentY + 20
+            end
+
+            function ModuleManager:refresh_size()
+                if not ModuleManager._state then return end
+                local h = get_options_height()
+                Options.Size = UDim2.fromOffset(241, h)
+                Module.Size = UDim2.fromOffset(241, 93 + h)
+            end
+
             function ModuleManager:change_state(state: boolean)
                 self._state = state
 
                 if self._state then
+                    local h = get_options_height()
+                    Options.Size = UDim2.fromOffset(241, h)
+
                     TweenService:Create(Module, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-                        Size = UDim2.fromOffset(241, 93 + self._size + self._multiplier)
+                        Size = UDim2.fromOffset(241, 93 + h)
                     }):Play()
 
                     TweenService:Create(Toggle, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
@@ -1690,6 +1718,13 @@ function Library:create_ui()
                         BackgroundColor3 = CurrentTheme.Accent,
                         Position = UDim2.fromScale(0.53, 0.5)
                     }):Play()
+
+                    -- remeasure after layout updates
+                    task.defer(function()
+                        if self._state then
+                            ModuleManager:refresh_size()
+                        end
+                    end)
                 else
                     TweenService:Create(Module, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
                         Size = UDim2.fromOffset(241, 93)
