@@ -1,6 +1,6 @@
 getgenv().GG = getgenv().GG or {}
 
--- Defaults 
+-- Defaults (có thể ghi đè bằng getgenv().GG trước khi load)
 GG.SelectedLanguage = GG.SelectedLanguage or "en"
 GG.Theme = GG.Theme or "Dark"
 GG.UIName = GG.UIName or "Sora x Hikaru"
@@ -106,18 +106,6 @@ function Library_SetTheme(name)
     GG.Theme = name
     local src = Theme[name] or Theme.Dark
     applyThemeColors(CurrentTheme, src)
-
-    -- Color picker popups are parented separately from the main interface.
-    -- Update them explicitly whenever the active theme changes.
-    for index = #Library._color_popups, 1, -1 do
-        local updatePopupTheme = Library._color_popups[index]
-        if updatePopupTheme then
-            local success = pcall(updatePopupTheme)
-            if not success then
-                table.remove(Library._color_popups, index)
-            end
-        end
-    end
 
     local gui = Library._ui
     if gui then
@@ -494,23 +482,22 @@ local Library = {
     _container_position = nil,
 
     _all_modules = {},  -- for Search
-    _color_popups = {},
 }
 Library.__index = Library
 Library.SetTheme = Library_SetTheme
 
--- Config Manager 
+-- ===================== Config Manager =====================
 function Library.SaveConfig()
     Config:save(game.GameId, Library._config)
     if Library.Notify then
-        Library.Notify.Success("Config", "Save config", 3)
+        Library.Notify.Success("Config", "Đã lưu config", 3)
     end
 end
 
 function Library.LoadConfig()
     Library._config = Config:load(game.GameId)
     if Library.Notify then
-        Library.Notify.Info("Config", " load config (Reopen UI to fully apply)", 4)
+        Library.Notify.Info("Config", "Đã load config (mở lại UI để áp dụng đầy đủ)", 4)
     end
     return Library._config
 end
@@ -523,7 +510,7 @@ function Library.ResetConfig()
     }
     Config:save(game.GameId, Library._config)
     if Library.Notify then
-        Library.Notify.Warn("Config", " reset config ", 3)
+        Library.Notify.Warn("Config", "Đã reset config về mặc định", 3)
     end
 end
 
@@ -535,17 +522,17 @@ function Library.ExportConfig()
         if setclipboard then
             pcall(setclipboard, encoded)
             if Library.Notify then
-                Library.Notify.Success("Config", "did copy config in clipboard", 3)
+                Library.Notify.Success("Config", "Đã copy config vào clipboard", 3)
             end
         else
             if Library.Notify then
-                Library.Notify.Info("Config", "Export OK (no copy in setclipboard)", 3)
+                Library.Notify.Info("Config", "Export OK (không có setclipboard)", 3)
             end
         end
         return encoded
     end
     if Library.Notify then
-        Library.Notify.Error("Config", "Export wrong", 3)
+        Library.Notify.Error("Config", "Export thất bại", 3)
     end
     return nil
 end
@@ -553,7 +540,7 @@ end
 function Library.ImportConfig(jsonString)
     if not jsonString or jsonString == "" then
         if Library.Notify then
-            Library.Notify.Error("Config", "nothing config ", 3)
+            Library.Notify.Error("Config", "Chuỗi config trống", 3)
         end
         return false
     end
@@ -569,7 +556,7 @@ function Library.ImportConfig(jsonString)
         return true
     end
     if Library.Notify then
-        Library.Notify.Error("Config", "Import wrong - JSON wrong", 3)
+        Library.Notify.Error("Config", "Import thất bại - JSON sai", 3)
     end
     return false
 end
@@ -596,11 +583,11 @@ function Library.ClearAllKeybinds()
     Library._config._keybinds = {}
     Config:save(game.GameId, Library._config)
     if Library.Notify then
-        Library.Notify.Warn("Keybinds", "del keybind", 3)
+        Library.Notify.Warn("Keybinds", "Đã xóa tất cả keybind", 3)
     end
 end
 
--- Watermark
+-- ===================== Watermark =====================
 function Library.CreateWatermark(text)
     if getgenv().SxH_Watermark then
         pcall(function() getgenv().SxH_Watermark:Destroy() end)
@@ -679,7 +666,7 @@ function Library.new()
     return self
 end
 
---  Notification 
+-- ===================== Sora x Hikaru Notification =====================
 local Notify = {}
 local MAX_VISIBLE = 5
 local active = {}
@@ -691,7 +678,7 @@ local function getNotifyParent()
     return (ok and ui) or CoreGui
 end
 
--- 
+-- gỡ bản cũ
 if getgenv().SxH_Notify then
     pcall(function() getgenv().SxH_Notify.Destroy() end)
 end
@@ -919,7 +906,7 @@ end
 
 getgenv().SxH_Notify = Notify
 
--- 
+-- Tương thích với code cũ
 function Library.SendNotification(settings)
     return Notify.Send(settings)
 end
@@ -1063,7 +1050,7 @@ function Library:create_ui()
         }
         UIGradient.Parent = ClientName
 
-        --  gradient loop
+        -- Chạy gradient liên tục
         task.spawn(function()
             local offset = 0
             while ClientName and ClientName.Parent do
@@ -1137,7 +1124,7 @@ function Library:create_ui()
     UIScale.Parent = Container    
     
     self._ui = MainGui
-    Library._ui = MainGui  --  colorpicker 
+    Library._ui = MainGui  -- để colorpicker / popup dùng được
 
     local function on_drag(input: InputObject, process: boolean)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then 
@@ -1257,7 +1244,7 @@ function Library:create_ui()
 
         AcrylicBlur.new(Container)
 
-        -- Watermark 
+        -- Watermark (mặc định bật, tắt bằng GG.Watermark = false)
         if GG.Watermark ~= false then
             Library.CreateWatermark(UI_NAME)
         end
@@ -1695,40 +1682,22 @@ function Library:create_ui()
 
             local function get_options_height()
                 local layout = Options:FindFirstChildOfClass("UIListLayout")
-                local contentY = layout and layout.AbsoluteContentSize.Y or 0
-                local trackedHeight = ModuleManager._size or 0
-
-                -- Keep enough room for layout padding and the last control.
-                local measuredHeight = contentY + 20
-                local fallbackHeight = trackedHeight + 20
-
-                return math.max(measuredHeight, fallbackHeight)
+                local contentY = 0
+                if layout then
+                    contentY = layout.AbsoluteContentSize.Y
+                end
+                if contentY < 1 then
+                    contentY = ModuleManager._size or 0
+                end
+                return contentY + 20
             end
 
             function ModuleManager:refresh_size()
-                if not ModuleManager._state then
-                    return
-                end
-
-                local optionsHeight = get_options_height()
-
-                Options.Size = UDim2.fromOffset(241, optionsHeight)
-                Module.Size = UDim2.fromOffset(241, 93 + optionsHeight)
+                if not ModuleManager._state then return end
+                local h = get_options_height()
+                Options.Size = UDim2.fromOffset(241, h)
+                Module.Size = UDim2.fromOffset(241, 93 + h)
             end
-
-            -- UIListLayout can update its content size one frame after a control
-            -- is inserted. Recalculate after the layout has settled so the last
-            -- control is not clipped by Module.ClipsDescendants.
-            local function schedule_size_refresh()
-                task.defer(function()
-                    task.defer(function()
-                        ModuleManager:refresh_size()
-                    end)
-                end)
-            end
-
-            Options.ChildAdded:Connect(schedule_size_refresh)
-            Options.ChildRemoved:Connect(schedule_size_refresh)
 
             function ModuleManager:change_state(state: boolean)
                 self._state = state
@@ -1754,11 +1723,6 @@ function Library:create_ui()
                     task.defer(function()
                         if self._state then
                             ModuleManager:refresh_size()
-                            task.defer(function()
-                                if self._state then
-                                    ModuleManager:refresh_size()
-                                end
-                            end)
                         end
                     end)
                 else
@@ -3454,7 +3418,7 @@ function Library:create_ui()
             end
 
             -- ===================== Color Picker =====================
-            -- ===================== Color Picker (HSV style) =====================
+            -- ===================== Color Picker (HSV + hex + presets) =====================
             function ModuleManager:create_colorpicker(settings: any)
                 LayoutOrderModule = LayoutOrderModule + 1
 
@@ -3475,6 +3439,7 @@ function Library:create_ui()
                 end
 
                 local h, s, v = defaultColor:ToHSV()
+                local tempH, tempS, tempV = h, s, v
 
                 local holder = Instance.new("Frame")
                 holder.Size = UDim2.new(0, 207, 0, 22)
@@ -3491,17 +3456,6 @@ function Library:create_ui()
                 title.TextXAlignment = Enum.TextXAlignment.Left
                 title.Text = settings.title or "Color"
                 title.Parent = holder
-
-                local arrow = Instance.new("TextLabel")
-                arrow.Size = UDim2.new(0, 14, 0, 14)
-                arrow.Position = UDim2.new(1, -36, 0.5, 0)
-                arrow.AnchorPoint = Vector2.new(0, 0.5)
-                arrow.BackgroundTransparency = 1
-                arrow.Font = Enum.Font.GothamBold
-                arrow.TextSize = 10
-                arrow.TextColor3 = CurrentTheme.TextSecondary
-                arrow.Text = "▾"
-                arrow.Parent = holder
 
                 local preview = Instance.new("TextButton")
                 preview.Size = UDim2.new(0, 22, 0, 18)
@@ -3522,7 +3476,6 @@ function Library:create_ui()
                 pStroke.Transparency = 0.3
                 pStroke.Parent = preview
 
-                -- Popup ScreenGui
                 local popupGui = Instance.new("ScreenGui")
                 popupGui.Name = "SxH_ColorPopup"
                 popupGui.ResetOnSpawn = false
@@ -3535,27 +3488,73 @@ function Library:create_ui()
                 if not popupGui.Parent then popupGui.Parent = CoreGui end
 
                 local popup = Instance.new("Frame")
-                popup.Size = UDim2.new(0, 200, 0, 180)
-                popup.BackgroundColor3 = CurrentTheme.ModuleBackground
-                popup.BackgroundTransparency = 0.05
+                popup.Size = UDim2.new(0, 260, 0, 320)
+                popup.BackgroundColor3 = Color3.fromRGB(22, 24, 32)
+                popup.BackgroundTransparency = 0.02
                 popup.Visible = false
                 popup.ZIndex = 200
                 popup.Parent = popupGui
 
                 local popCorner = Instance.new("UICorner")
-                popCorner.CornerRadius = UDim.new(0, 10)
+                popCorner.CornerRadius = UDim.new(0, 12)
                 popCorner.Parent = popup
 
                 local popStroke = Instance.new("UIStroke")
-                popStroke.Color = CurrentTheme.Stroke
-                popStroke.Transparency = 0.3
+                popStroke.Color = Color3.fromRGB(70, 75, 95)
+                popStroke.Transparency = 0.35
                 popStroke.Parent = popup
 
-                -- SV Panel (saturation / value)
+                -- Title bar
+                local titleBar = Instance.new("Frame")
+                titleBar.Size = UDim2.new(1, 0, 0, 36)
+                titleBar.BackgroundTransparency = 1
+                titleBar.ZIndex = 201
+                titleBar.Parent = popup
+
+                local titleIcon = Instance.new("TextLabel")
+                titleIcon.Size = UDim2.new(0, 22, 0, 22)
+                titleIcon.Position = UDim2.new(0, 12, 0.5, 0)
+                titleIcon.AnchorPoint = Vector2.new(0, 0.5)
+                titleIcon.BackgroundTransparency = 1
+                titleIcon.Text = "🎨"
+                titleIcon.TextSize = 14
+                titleIcon.ZIndex = 202
+                titleIcon.Parent = titleBar
+
+                local titleText = Instance.new("TextLabel")
+                titleText.Size = UDim2.new(1, -80, 1, 0)
+                titleText.Position = UDim2.new(0, 36, 0, 0)
+                titleText.BackgroundTransparency = 1
+                titleText.Font = Enum.Font.GothamBold
+                titleText.TextSize = 13
+                titleText.TextColor3 = Color3.fromRGB(235, 235, 245)
+                titleText.TextXAlignment = Enum.TextXAlignment.Left
+                titleText.Text = settings.title or "Color Picker"
+                titleText.ZIndex = 202
+                titleText.Parent = titleBar
+
+                local closeBtn = Instance.new("TextButton")
+                closeBtn.Size = UDim2.new(0, 26, 0, 26)
+                closeBtn.Position = UDim2.new(1, -32, 0.5, 0)
+                closeBtn.AnchorPoint = Vector2.new(0, 0.5)
+                closeBtn.BackgroundColor3 = Color3.fromRGB(40, 42, 52)
+                closeBtn.BackgroundTransparency = 0.3
+                closeBtn.Text = "×"
+                closeBtn.Font = Enum.Font.GothamBold
+                closeBtn.TextSize = 16
+                closeBtn.TextColor3 = Color3.fromRGB(200, 200, 210)
+                closeBtn.AutoButtonColor = false
+                closeBtn.ZIndex = 202
+                closeBtn.Parent = titleBar
+
+                local closeCorner = Instance.new("UICorner")
+                closeCorner.CornerRadius = UDim.new(0, 6)
+                closeCorner.Parent = closeBtn
+
+                -- SV panel
                 local svPanel = Instance.new("ImageButton")
-                svPanel.Name = "SV"
-                svPanel.Size = UDim2.new(0, 176, 0, 110)
-                svPanel.Position = UDim2.new(0, 12, 0, 12)
+                svPanel.Size = UDim2.new(0, 232, 0, 130)
+                svPanel.Position = UDim2.new(0, 14, 0, 42)
                 svPanel.BackgroundColor3 = Color3.fromHSV(h, 1, 1)
                 svPanel.AutoButtonColor = false
                 svPanel.BorderSizePixel = 0
@@ -3566,18 +3565,15 @@ function Library:create_ui()
                 svCorner.CornerRadius = UDim.new(0, 8)
                 svCorner.Parent = svPanel
 
-                -- White to transparent gradient (saturation axis)
                 local svWhite = Instance.new("Frame")
                 svWhite.Size = UDim2.new(1, 0, 1, 0)
                 svWhite.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
                 svWhite.BorderSizePixel = 0
                 svWhite.ZIndex = 202
                 svWhite.Parent = svPanel
-
                 local svWhiteCorner = Instance.new("UICorner")
                 svWhiteCorner.CornerRadius = UDim.new(0, 8)
                 svWhiteCorner.Parent = svWhite
-
                 local svWhiteGrad = Instance.new("UIGradient")
                 svWhiteGrad.Transparency = NumberSequence.new({
                     NumberSequenceKeypoint.new(0, 0),
@@ -3585,18 +3581,15 @@ function Library:create_ui()
                 })
                 svWhiteGrad.Parent = svWhite
 
-                -- Black gradient (value axis)
                 local svBlack = Instance.new("Frame")
                 svBlack.Size = UDim2.new(1, 0, 1, 0)
                 svBlack.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
                 svBlack.BorderSizePixel = 0
                 svBlack.ZIndex = 203
                 svBlack.Parent = svPanel
-
                 local svBlackCorner = Instance.new("UICorner")
                 svBlackCorner.CornerRadius = UDim.new(0, 8)
                 svBlackCorner.Parent = svBlack
-
                 local svBlackGrad = Instance.new("UIGradient")
                 svBlackGrad.Rotation = 90
                 svBlackGrad.Transparency = NumberSequence.new({
@@ -3605,40 +3598,35 @@ function Library:create_ui()
                 })
                 svBlackGrad.Parent = svBlack
 
-                -- SV cursor
                 local svCursor = Instance.new("Frame")
-                svCursor.Size = UDim2.new(0, 12, 0, 12)
+                svCursor.Size = UDim2.new(0, 14, 0, 14)
                 svCursor.AnchorPoint = Vector2.new(0.5, 0.5)
                 svCursor.Position = UDim2.new(s, 0, 1 - v, 0)
                 svCursor.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+                svCursor.BackgroundTransparency = 1
                 svCursor.BorderSizePixel = 0
                 svCursor.ZIndex = 204
                 svCursor.Parent = svPanel
-
+                local svCursorStroke = Instance.new("UIStroke")
+                svCursorStroke.Color = Color3.fromRGB(255, 255, 255)
+                svCursorStroke.Thickness = 2
+                svCursorStroke.Parent = svCursor
                 local svCursorCorner = Instance.new("UICorner")
                 svCursorCorner.CornerRadius = UDim.new(1, 0)
                 svCursorCorner.Parent = svCursor
 
-                local svCursorStroke = Instance.new("UIStroke")
-                svCursorStroke.Color = CurrentTheme.Stroke
-                svCursorStroke.Thickness = 1.5
-                svCursorStroke.Parent = svCursor
-
-                -- Hue slider
+                -- Hue bar
                 local hueBar = Instance.new("ImageButton")
-                hueBar.Name = "Hue"
-                hueBar.Size = UDim2.new(0, 176, 0, 14)
-                hueBar.Position = UDim2.new(0, 12, 0, 132)
+                hueBar.Size = UDim2.new(0, 232, 0, 14)
+                hueBar.Position = UDim2.new(0, 14, 0, 182)
                 hueBar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
                 hueBar.AutoButtonColor = false
                 hueBar.BorderSizePixel = 0
                 hueBar.ZIndex = 201
                 hueBar.Parent = popup
-
                 local hueCorner = Instance.new("UICorner")
                 hueCorner.CornerRadius = UDim.new(1, 0)
                 hueCorner.Parent = hueBar
-
                 local hueGrad = Instance.new("UIGradient")
                 hueGrad.Color = ColorSequence.new({
                     ColorSequenceKeypoint.new(0.00, Color3.fromRGB(255, 0, 0)),
@@ -3659,61 +3647,103 @@ function Library:create_ui()
                 hueCursor.BorderSizePixel = 0
                 hueCursor.ZIndex = 202
                 hueCursor.Parent = hueBar
-
                 local hueCursorCorner = Instance.new("UICorner")
                 hueCursorCorner.CornerRadius = UDim.new(1, 0)
                 hueCursorCorner.Parent = hueCursor
 
-                local hueCursorStroke = Instance.new("UIStroke")
-                hueCursorStroke.Color = CurrentTheme.Stroke
-                hueCursorStroke.Thickness = 1
-                hueCursorStroke.Parent = hueCursor
+                -- Hex row
+                local hexBox = Instance.new("TextBox")
+                hexBox.Size = UDim2.new(0, 110, 0, 28)
+                hexBox.Position = UDim2.new(0, 14, 0, 210)
+                hexBox.BackgroundColor3 = Color3.fromRGB(32, 35, 48)
+                hexBox.BorderSizePixel = 0
+                hexBox.Font = Enum.Font.Gotham
+                hexBox.TextSize = 12
+                hexBox.TextColor3 = Color3.fromRGB(220, 225, 235)
+                hexBox.ClearTextOnFocus = false
+                hexBox.ZIndex = 201
+                hexBox.Parent = popup
+                local hexCorner = Instance.new("UICorner")
+                hexCorner.CornerRadius = UDim.new(0, 6)
+                hexCorner.Parent = hexBox
+                local hexPad = Instance.new("UIPadding")
+                hexPad.PaddingLeft = UDim.new(0, 8)
+                hexPad.Parent = hexBox
 
-                -- Hex label
-                local hexLabel = Instance.new("TextLabel")
-                hexLabel.Size = UDim2.new(1, -48, 0, 16)
-                hexLabel.Position = UDim2.new(0, 12, 0, 154)
-                hexLabel.BackgroundTransparency = 1
-                hexLabel.Font = Enum.Font.Gotham
-                hexLabel.TextSize = 11
-                hexLabel.TextColor3 = CurrentTheme.TextSecondary
-                hexLabel.TextXAlignment = Enum.TextXAlignment.Left
-                hexLabel.ZIndex = 201
-                hexLabel.Parent = popup
+                local copyBtn = Instance.new("TextButton")
+                copyBtn.Size = UDim2.new(0, 28, 0, 28)
+                copyBtn.Position = UDim2.new(0, 130, 0, 210)
+                copyBtn.BackgroundColor3 = Color3.fromRGB(32, 35, 48)
+                copyBtn.Text = "📋"
+                copyBtn.TextSize = 12
+                copyBtn.AutoButtonColor = false
+                copyBtn.ZIndex = 201
+                copyBtn.Parent = popup
+                local copyCorner = Instance.new("UICorner")
+                copyCorner.CornerRadius = UDim.new(0, 6)
+                copyCorner.Parent = copyBtn
 
-                -- Nút X đóng popup
-                local closeBtn = Instance.new("TextButton")
-                closeBtn.Size = UDim2.new(0, 22, 0, 22)
-                closeBtn.Position = UDim2.new(1, -30, 0, 6)
-                closeBtn.BackgroundColor3 = CurrentTheme.Card
-                closeBtn.BackgroundTransparency = 0.2
-                closeBtn.Text = "×"
-                closeBtn.Font = Enum.Font.GothamBold
-                closeBtn.TextSize = 16
-                closeBtn.TextColor3 = CurrentTheme.TextPrimary
-                closeBtn.AutoButtonColor = false
-                closeBtn.ZIndex = 210
-                closeBtn.Parent = popup
-
-                local closeCorner = Instance.new("UICorner")
-                closeCorner.CornerRadius = UDim.new(0, 6)
-                closeCorner.Parent = closeBtn
-
-                local function updatePopupTheme()
-                    popup.BackgroundColor3 = CurrentTheme.ModuleBackground
-                    popStroke.Color = CurrentTheme.Stroke
-                    hexLabel.TextColor3 = CurrentTheme.TextSecondary
-                    closeBtn.BackgroundColor3 = CurrentTheme.Card
-                    closeBtn.TextColor3 = CurrentTheme.TextPrimary
-                    svCursorStroke.Color = CurrentTheme.Stroke
-                    hueCursorStroke.Color = CurrentTheme.Stroke
-                    pStroke.Color = CurrentTheme.Stroke
-                    title.TextColor3 = CurrentTheme.TextPrimary
-                    arrow.TextColor3 = CurrentTheme.TextSecondary
+                -- Presets
+                local presets = {
+                    Color3.fromRGB(99, 102, 241),
+                    Color3.fromRGB(236, 72, 153),
+                    Color3.fromRGB(239, 68, 68),
+                    Color3.fromRGB(34, 197, 94),
+                    Color3.fromRGB(234, 179, 8),
+                    Color3.fromRGB(148, 163, 184),
+                    Color3.fromRGB(255, 255, 255),
+                }
+                for i, col in ipairs(presets) do
+                    local dot = Instance.new("TextButton")
+                    dot.Size = UDim2.new(0, 16, 0, 16)
+                    dot.Position = UDim2.new(0, 168 + (i - 1) * 12, 0, 216)
+                    if i > 1 then
+                        dot.Position = UDim2.new(0, 168 + (i - 1) * 18, 0, 216)
+                    end
+                    dot.BackgroundColor3 = col
+                    dot.Text = ""
+                    dot.AutoButtonColor = false
+                    dot.ZIndex = 201
+                    dot.Parent = popup
+                    local dc = Instance.new("UICorner")
+                    dc.CornerRadius = UDim.new(1, 0)
+                    dc.Parent = dot
+                    dot.MouseButton1Click:Connect(function()
+                        tempH, tempS, tempV = col:ToHSV()
+                        updateTemp(false)
+                    end)
                 end
 
-                table.insert(Library._color_popups, updatePopupTheme)
-                updatePopupTheme()
+                -- Cancel / Confirm
+                local cancelBtn = Instance.new("TextButton")
+                cancelBtn.Size = UDim2.new(0, 110, 0, 32)
+                cancelBtn.Position = UDim2.new(0, 14, 0, 258)
+                cancelBtn.BackgroundColor3 = Color3.fromRGB(40, 44, 58)
+                cancelBtn.Text = "Cancel"
+                cancelBtn.Font = Enum.Font.GothamSemibold
+                cancelBtn.TextSize = 12
+                cancelBtn.TextColor3 = Color3.fromRGB(200, 205, 220)
+                cancelBtn.AutoButtonColor = false
+                cancelBtn.ZIndex = 201
+                cancelBtn.Parent = popup
+                local cancelCorner = Instance.new("UICorner")
+                cancelCorner.CornerRadius = UDim.new(0, 8)
+                cancelCorner.Parent = cancelBtn
+
+                local confirmBtn = Instance.new("TextButton")
+                confirmBtn.Size = UDim2.new(0, 110, 0, 32)
+                confirmBtn.Position = UDim2.new(0, 136, 0, 258)
+                confirmBtn.BackgroundColor3 = CurrentTheme.Accent
+                confirmBtn.Text = "Confirm"
+                confirmBtn.Font = Enum.Font.GothamBold
+                confirmBtn.TextSize = 12
+                confirmBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+                confirmBtn.AutoButtonColor = false
+                confirmBtn.ZIndex = 201
+                confirmBtn.Parent = popup
+                local confirmCorner = Instance.new("UICorner")
+                confirmCorner.CornerRadius = UDim.new(0, 8)
+                confirmCorner.Parent = confirmBtn
 
                 local function toHex(color)
                     return string.format("#%02X%02X%02X",
@@ -3722,25 +3752,43 @@ function Library:create_ui()
                         math.floor(color.B * 255 + 0.5))
                 end
 
-                local function applyColor(save)
-                    local c = Color3.fromHSV(h, s, v)
-                    preview.BackgroundColor3 = c
-                    svPanel.BackgroundColor3 = Color3.fromHSV(h, 1, 1)
-                    svCursor.Position = UDim2.new(s, 0, 1 - v, 0)
-                    hueCursor.Position = UDim2.new(h, 0, 0.5, 0)
-                    hexLabel.Text = toHex(c)
+                local function fromHex(str)
+                    str = string.gsub(str or "", "#", "")
+                    if #str ~= 6 then return nil end
+                    local r = tonumber(string.sub(str, 1, 2), 16)
+                    local g = tonumber(string.sub(str, 3, 4), 16)
+                    local b = tonumber(string.sub(str, 5, 6), 16)
+                    if r and g and b then
+                        return Color3.fromRGB(r, g, b)
+                    end
+                    return nil
+                end
 
-                    if save ~= false then
-                        Library._config._flags[settings.flag] = { R = c.R, G = c.G, B = c.B }
-                        Config:save(game.GameId, Library._config)
-                        if settings.callback then
-                            settings.callback(c)
-                        end
+                function updateTemp(saveHex)
+                    local c = Color3.fromHSV(tempH, tempS, tempV)
+                    svPanel.BackgroundColor3 = Color3.fromHSV(tempH, 1, 1)
+                    svCursor.Position = UDim2.new(tempS, 0, 1 - tempV, 0)
+                    hueCursor.Position = UDim2.new(tempH, 0, 0.5, 0)
+                    if saveHex ~= false then
+                        hexBox.Text = toHex(c)
                     end
                 end
-                applyColor(false)
+                updateTemp()
 
-                -- Drag helpers
+                local function applyFinal()
+                    h, s, v = tempH, tempS, tempV
+                    local c = Color3.fromHSV(h, s, v)
+                    preview.BackgroundColor3 = c
+                    Library._config._flags[settings.flag] = { R = c.R, G = c.G, B = c.B }
+                    Config:save(game.GameId, Library._config)
+                    if settings.callback then
+                        pcall(settings.callback, c)
+                    end
+                    if Library.Notify then
+                        Library.Notify.Success("Color", "Color updated!", 2)
+                    end
+                end
+
                 local function bindDrag(btn, onMove)
                     local dragging = false
                     btn.InputBegan:Connect(function(input)
@@ -3757,10 +3805,7 @@ function Library:create_ui()
                     end)
                     UserInputService.InputEnded:Connect(function(input)
                         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                            if dragging then
-                                dragging = false
-                                applyColor(true)
-                            end
+                            dragging = false
                         end
                     end)
                 end
@@ -3768,79 +3813,90 @@ function Library:create_ui()
                 bindDrag(svPanel, function()
                     local relX = math.clamp((mouse.X - svPanel.AbsolutePosition.X) / svPanel.AbsoluteSize.X, 0, 1)
                     local relY = math.clamp((mouse.Y - svPanel.AbsolutePosition.Y) / svPanel.AbsoluteSize.Y, 0, 1)
-                    s = relX
-                    v = 1 - relY
-                    applyColor(false)
+                    tempS = relX
+                    tempV = 1 - relY
+                    updateTemp()
                 end)
 
                 bindDrag(hueBar, function()
                     local relX = math.clamp((mouse.X - hueBar.AbsolutePosition.X) / hueBar.AbsoluteSize.X, 0, 1)
-                    h = relX
-                    applyColor(false)
+                    tempH = relX
+                    updateTemp()
+                end)
+
+                hexBox.FocusLost:Connect(function()
+                    local c = fromHex(hexBox.Text)
+                    if c then
+                        tempH, tempS, tempV = c:ToHSV()
+                        updateTemp()
+                    else
+                        updateTemp()
+                    end
+                end)
+
+                copyBtn.MouseButton1Click:Connect(function()
+                    if setclipboard then
+                        pcall(setclipboard, hexBox.Text)
+                        if Library.Notify then
+                            Library.Notify.Info("Color", "Hex copied", 2)
+                        end
+                    end
                 end)
 
                 local function openPopup()
+                    tempH, tempS, tempV = h, s, v
+                    updateTemp()
                     local abs = preview.AbsolutePosition
                     local size = preview.AbsoluteSize
-                    popup.Position = UDim2.fromOffset(abs.X - 200 + size.X, abs.Y + size.Y + 6)
+                    popup.Position = UDim2.fromOffset(
+                        math.clamp(abs.X - 100, 20, 9999),
+                        abs.Y + size.Y + 8
+                    )
                     popup.Visible = true
-                    arrow.Text = "▴"
                 end
 
                 local function closePopup()
                     popup.Visible = false
-                    arrow.Text = "▾"
                 end
 
                 closeBtn.MouseButton1Click:Connect(closePopup)
-
-                closeBtn.MouseEnter:Connect(function()
-                    TweenService:Create(closeBtn, TweenInfo.new(0.15), {
-                        BackgroundColor3 = CurrentTheme.Accent,
-                        TextColor3 = CurrentTheme.TextPrimary
-                    }):Play()
+                cancelBtn.MouseButton1Click:Connect(function()
+                    tempH, tempS, tempV = h, s, v
+                    closePopup()
                 end)
-                closeBtn.MouseLeave:Connect(function()
-                    TweenService:Create(closeBtn, TweenInfo.new(0.15), {
-                        BackgroundColor3 = CurrentTheme.Card,
-                        TextColor3 = CurrentTheme.TextPrimary
-                    }):Play()
+                confirmBtn.MouseButton1Click:Connect(function()
+                    applyFinal()
+                    closePopup()
                 end)
 
                 preview.MouseButton1Click:Connect(function()
                     if popup.Visible then closePopup() else openPopup() end
                 end)
 
-                title.InputBegan:Connect(function(input)
-                    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                        if popup.Visible then closePopup() else openPopup() end
-                    end
+                closeBtn.MouseEnter:Connect(function()
+                    TweenService:Create(closeBtn, TweenInfo.new(0.15), {
+                        BackgroundColor3 = Color3.fromRGB(220, 60, 70)
+                    }):Play()
                 end)
-
-                UserInputService.InputBegan:Connect(function(input)
-                    if not popup.Visible then return end
-                    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-                        local pos = input.Position
-                        local pAbs, pSize = popup.AbsolutePosition, popup.AbsoluteSize
-                        local inPopup = pos.X >= pAbs.X and pos.X <= pAbs.X + pSize.X and pos.Y >= pAbs.Y and pos.Y <= pAbs.Y + pSize.Y
-                        local pr, ps = preview.AbsolutePosition, preview.AbsoluteSize
-                        local inPreview = pos.X >= pr.X and pos.X <= pr.X + ps.X and pos.Y >= pr.Y and pos.Y <= pr.Y + ps.Y
-                        if not inPopup and not inPreview then
-                            closePopup()
-                        end
-                    end
+                closeBtn.MouseLeave:Connect(function()
+                    TweenService:Create(closeBtn, TweenInfo.new(0.15), {
+                        BackgroundColor3 = Color3.fromRGB(40, 42, 52)
+                    }):Play()
                 end)
 
                 return {
                     Set = function(_, color)
                         h, s, v = color:ToHSV()
-                        applyColor(true)
+                        tempH, tempS, tempV = h, s, v
+                        preview.BackgroundColor3 = color
+                        updateTemp()
                     end,
                     Get = function()
                         return Color3.fromHSV(h, s, v)
                     end
                 }
             end
+
 
             -- ===================== Section / Group =====================
             function ModuleManager:create_section(settings: any)
