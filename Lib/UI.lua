@@ -651,7 +651,7 @@ end
 
 getgenv().SxH_Notify = Notify
 
--- Tương thích với code cũ
+-- Compatible with old code
 function Library.SendNotification(settings)
     return Notify.Send(settings)
 end
@@ -795,7 +795,7 @@ function Library:create_ui()
         }
         UIGradient.Parent = ClientName
 
-        -- Chạy gradient liên tục
+        -- loop gradient working
         task.spawn(function()
             local offset = 0
             while ClientName and ClientName.Parent do
