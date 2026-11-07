@@ -55,7 +55,7 @@ local Theme = {
         Stroke = Color3.fromRGB(220, 225, 235),
         Divider = Color3.fromRGB(230, 233, 240),
         ToggleOff = Color3.fromRGB(200, 200, 210),
-        Card = Color3.fromRGB(250, 251, 253),
+        Card = Color3.fromRGB(235, 238, 245),
     },
     Dark = {
         Background = Color3.fromRGB(12, 13, 15),
@@ -107,7 +107,6 @@ function Library_SetTheme(name)
     local src = Theme[name] or Theme.Dark
     applyThemeColors(CurrentTheme, src)
 
-    -- Update main window
     local gui = Library._ui
     if gui then
         local container = gui:FindFirstChild("Container")
@@ -116,17 +115,39 @@ function Library_SetTheme(name)
             local stroke = container:FindFirstChildOfClass("UIStroke")
             if stroke then stroke.Color = CurrentTheme.Stroke end
         end
+
         for _, obj in ipairs(gui:GetDescendants()) do
+            if not obj:IsA("GuiObject") then
+                continue
+            end
+
             if obj.Name == "Module" and obj:IsA("Frame") then
                 obj.BackgroundColor3 = CurrentTheme.ModuleBackground
                 local st = obj:FindFirstChildOfClass("UIStroke")
                 if st then st.Color = CurrentTheme.Stroke end
-            elseif obj.Name == "Tab" and obj:IsA("TextButton") then
-                -- keep selected state simple
-            elseif obj:IsA("TextLabel") or obj:IsA("TextBox") or obj:IsA("TextButton") then
-                -- skip accent labels
+            elseif obj.Name == "Paragraph" or obj.Name == "Text" then
+                obj.BackgroundColor3 = CurrentTheme.Card
+            elseif obj.Name == "Divider" and obj:IsA("Frame") then
+                obj.BackgroundColor3 = CurrentTheme.Stroke
+            elseif obj:IsA("UIStroke") then
+                if obj.Parent and (obj.Parent.Name == "Module" or obj.Parent.Name == "Container" or obj.Parent.Name == "Paragraph") then
+                    obj.Color = CurrentTheme.Stroke
+                end
+            elseif obj:IsA("TextLabel") or obj:IsA("TextBox") then
+                local n = obj.Name
+                if n == "ModuleName" or n == "ClientName" then
+                    obj.TextColor3 = CurrentTheme.Accent
+                elseif n == "Description" or n == "Value" or n == "CurrentOption" then
+                    obj.TextColor3 = CurrentTheme.TextSecondary
+                elseif n ~= "Option" and n ~= "KeybindLabel" then
+                    -- general labels
+                    if obj.TextTransparency < 0.5 then
+                        obj.TextColor3 = CurrentTheme.TextPrimary
+                    end
+                end
             end
         end
+
         for _, data in ipairs(Library._all_modules or {}) do
             if data.frame then
                 data.frame.BackgroundColor3 = CurrentTheme.ModuleBackground
@@ -1886,7 +1907,7 @@ function Library:create_ui()
                 -- Hover effect for Paragraph (optional)
                 Paragraph.MouseEnter:Connect(function()
                     TweenService:Create(Paragraph, TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-                        BackgroundColor3 = Color3.fromRGB(42, 50, 66)
+                        BackgroundColor3 = CurrentTheme.Card:Lerp(CurrentTheme.Accent, 0.15)
                     }):Play()
                 end)
             
@@ -1956,7 +1977,7 @@ function Library:create_ui()
                 -- Hover effect for TextFrame (optional)
                 TextFrame.MouseEnter:Connect(function()
                     TweenService:Create(TextFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-                        BackgroundColor3 = Color3.fromRGB(42, 50, 66)
+                        BackgroundColor3 = CurrentTheme.Card:Lerp(CurrentTheme.Accent, 0.15)
                     }):Play()
                 end)
             
