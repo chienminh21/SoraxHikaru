@@ -884,11 +884,23 @@ function Library.CreateWatermark(text)
     stroke.Parent = frame
 
     local pad = Instance.new("UIPadding")
-    pad.PaddingLeft = UDim.new(0, 10)
+    pad.PaddingLeft = UDim.new(0, 8)
     pad.PaddingRight = UDim.new(0, 10)
     pad.Parent = frame
 
-    local label = Instance.new("TextLabel")
+    local icon = Instance.new("ImageLabel")
+    icon.Name = "WatermarkIcon"
+    icon.Size = UDim2.fromOffset(18, 18)
+    icon.Position = UDim2.new(0, 0, 0.5, 0)
+    icon.AnchorPoint = Vector2.new(0, 0.5)
+    icon.BackgroundTransparency = 1
+    icon.Image = "rbxassetid://76051962811019"
+    icon.ScaleType = Enum.ScaleType.Fit
+    icon.Parent = frame
+
+    pad.PaddingLeft = UDim.new(0, 32)
+    
+    label.Position = UDim2.fromOffset(0, 0)
     label.BackgroundTransparency = 1
     label.Size = UDim2.new(0, 0, 1, 0)
     label.AutomaticSize = Enum.AutomaticSize.X
