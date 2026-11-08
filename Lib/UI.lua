@@ -8,6 +8,7 @@ GG.FolderName = GG.FolderName or "SoraHikaru"
 GG.GuiName = GG.GuiName or "SoraHikaru"
 GG.Transparency = GG.Transparency or 0.15
 GG.Watermark = GG.Watermark ~= false
+GG.WatermarkIcon = GG.WatermarkIcon or "rbxassetid://76051962811019" -- đổi icon ngoài bằng GG.WatermarkIcon
 GG.ToggleKey = GG.ToggleKey or Enum.KeyCode.Insert  -- phím mở/đóng UI
 GG.Animations = GG.Animations ~= false              -- bật/tắt tween
 GG.TextColor = GG.TextColor or nil
@@ -642,37 +643,64 @@ end
 function Library.CreateWatermark(text)
     Library.DestroyWatermark()
 
+    local iconId = GG.WatermarkIcon or "rbxassetid://76051962811019"
+    if type(iconId) == "number" then
+        iconId = "rbxassetid://" .. tostring(iconId)
+    end
+
     local wmGui = Instance.new("ScreenGui")
     wmGui.Name = "SxH_Watermark"
     wmGui.ResetOnSpawn = false
     wmGui.IgnoreGuiInset = true
     wmGui.DisplayOrder = 50
-    wmGui.Parent = CoreGui
+    pcall(function()
+        wmGui.Parent = (gethui and gethui()) or CoreGui
+    end)
+    if not wmGui.Parent then
+        wmGui.Parent = CoreGui
+    end
 
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0, 0, 0, 28)
+    frame.Size = UDim2.new(0, 0, 0, 30)
     frame.AutomaticSize = Enum.AutomaticSize.X
     frame.Position = UDim2.new(0, 12, 0, 12)
     frame.BackgroundColor3 = CurrentTheme.Card or CurrentTheme.BackgroundSecondary
-    frame.BackgroundTransparency = 0.15
+    frame.BackgroundTransparency = 0.12
     frame.BorderSizePixel = 0
     frame.Parent = wmGui
 
     local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 6)
+    corner.CornerRadius = UDim.new(0, 8)
     corner.Parent = frame
 
     local stroke = Instance.new("UIStroke")
     stroke.Color = CurrentTheme.Accent
-    stroke.Transparency = 0.5
+    stroke.Transparency = 0.45
     stroke.Parent = frame
 
+    local layout = Instance.new("UIListLayout")
+    layout.FillDirection = Enum.FillDirection.Horizontal
+    layout.VerticalAlignment = Enum.VerticalAlignment.Center
+    layout.Padding = UDim.new(0, 8)
+    layout.Parent = frame
+
     local pad = Instance.new("UIPadding")
-    pad.PaddingLeft = UDim.new(0, 10)
+    pad.PaddingLeft = UDim.new(0, 8)
     pad.PaddingRight = UDim.new(0, 10)
+    pad.PaddingTop = UDim.new(0, 4)
+    pad.PaddingBottom = UDim.new(0, 4)
     pad.Parent = frame
 
+    local icon = Instance.new("ImageLabel")
+    icon.Name = "Icon"
+    icon.Size = UDim2.fromOffset(18, 18)
+    icon.BackgroundTransparency = 1
+    icon.Image = iconId
+    icon.ScaleType = Enum.ScaleType.Fit
+    icon.Parent = frame
+
     local label = Instance.new("TextLabel")
+    label.Name = "Label"
     label.BackgroundTransparency = 1
     label.Size = UDim2.new(0, 0, 1, 0)
     label.AutomaticSize = Enum.AutomaticSize.X
@@ -4164,18 +4192,28 @@ function Library:create_ui()
                     mk("UICorner", { CornerRadius = UDim.new(0, 6) }, Cancel)
 
                     local Confirm = mk("TextButton", {
-                        Text = "Confirm",
-                        Font = Enum.Font.GothamBold,
-                        TextSize = 12,
-                        TextColor3 = contrastText(T.Accent),
+                        Text = "",
                         AutoButtonColor = false,
                         BackgroundColor3 = Color3.new(1, 1, 1),
                         Position = UDim2.fromOffset(196, 251),
                         Size = UDim2.fromOffset(86, 26),
                         BorderSizePixel = 0,
+                        ZIndex = 51,
                     }, Popup)
                     mk("UICorner", { CornerRadius = UDim.new(0, 6) }, Confirm)
                     mk("UIGradient", { Color = ColorSequence.new(T.Accent, accentB) }, Confirm)
+                    -- Text on a separate label so gradient never hides "Confirm"
+                    mk("TextLabel", {
+                        Name = "ConfirmLabel",
+                        Text = "Confirm",
+                        Font = Enum.Font.GothamBold,
+                        TextSize = 12,
+                        TextColor3 = Color3.fromRGB(255, 255, 255),
+                        TextTransparency = 0,
+                        BackgroundTransparency = 1,
+                        Size = UDim2.fromScale(1, 1),
+                        ZIndex = 52,
+                    }, Confirm)
 
                     ---------------------------------------------------
                     -- Logic
