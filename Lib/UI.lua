@@ -23,6 +23,13 @@ GG.ImageBackground = GG.ImageBackground or ""       -- image behind the window: 
 GG.ImageBackgroundStyle = GG.ImageBackgroundStyle or "Crop"  -- Stretch | Fit | Crop | Tile | FadeLeft | FadeRight | FadeTop | FadeBottom
 GG.ImageBackgroundTransparency = GG.ImageBackgroundTransparency or 0.7
 GG.LucideUrl = GG.LucideUrl or nil                  -- optional custom URL for the Lucide icon library loader
+GG.WatermarkIcon = GG.WatermarkIcon or "rbxassetid://76051962811019"  -- watermark image: asset id / image URL / Lucide name
+GG.WatermarkSize = GG.WatermarkSize or 40           -- icon size in pixels
+GG.WatermarkPosition = GG.WatermarkPosition or "TopLeft"  -- TopLeft | TopRight | BottomLeft | BottomRight
+GG.WatermarkOffset = GG.WatermarkOffset or Vector2.new(12, 12)  -- distance from the screen corner
+GG.WatermarkTransparency = GG.WatermarkTransparency or 0  -- 0 = solid, 1 = invisible
+GG.WatermarkColor = GG.WatermarkColor or nil        -- optional tint (Color3)
+GG.WatermarkText = GG.WatermarkText or ""           -- optional text next to the icon, "{fps}" shows the FPS ("" = none)
 
 local UI_NAME = GG.UIName
 local FOLDER_NAME = GG.FolderName
@@ -732,6 +739,12 @@ local Library = {
 Library.__index = Library
 Library.SetTheme = Library_SetTheme
 
+-- Plugin support: internals used by PluginSystem
+Library._connections = Connections
+function Library.SaveSilent()
+    Config:save(game.GameId, Library._config)
+end
+
 -- Icon helpers (also usable from your own scripts)
 Library.ApplyIcon = applyIcon                       -- Library.ApplyIcon(imageLabel, "trash-2", optionalTintColor)
 Library.GetImage = resolveImageContent              -- turns an asset id / number / URL into an image string
@@ -843,7 +856,20 @@ function Library.ClearAllKeybinds()
     end
 end
 
--- Watermark (top-left label with the UI name and FPS)
+-- Watermark: an icon in a screen corner. Options: GG.WatermarkIcon / Size / Position / Offset /
+-- Transparency / Color / Text, or Library.SetWatermarkOptions({ ... }) at any time.
+local WATERMARK_CORNERS = {
+    TopLeft = { anchor = Vector2.new(0, 0), x = 1, y = 1 },
+    TopRight = { anchor = Vector2.new(1, 0), x = -1, y = 1 },
+    BottomLeft = { anchor = Vector2.new(0, 1), x = 1, y = -1 },
+    BottomRight = { anchor = Vector2.new(1, 1), x = -1, y = -1 },
+}
+
+local function getGuiParent()
+    local ok, ui = pcall(function() return gethui and gethui() end)
+    return (ok and ui) or CoreGui
+end
+
 function Library.DestroyWatermark()
     if Library._wm_connection then
         Library._wm_connection:Disconnect()
@@ -855,68 +881,110 @@ function Library.DestroyWatermark()
     end
 end
 
-function Library.CreateWatermark(text)
+function Library.CreateWatermark()
     Library.DestroyWatermark()
 
-    local wmGui = Instance.new("ScreenGui")
-    wmGui.Name = "SxH_Watermark"
-    wmGui.ResetOnSpawn = false
-    wmGui.IgnoreGuiInset = true
-    wmGui.DisplayOrder = 50
-    wmGui.Parent = CoreGui
+    local size = math.clamp(tonumber(GG.WatermarkSize) or 40, 12, 256)
+    local corner = WATERMARK_CORNERS[GG.WatermarkPosition] or WATERMARK_CORNERS.TopLeft
+    local offset = typeof(GG.WatermarkOffset) == "Vector2" and GG.WatermarkOffset or Vector2.new(12, 12)
+    local tint = typeof(GG.WatermarkColor) == "Color3" and GG.WatermarkColor or nil
 
-    local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0, 0, 0, 28)
-    frame.AutomaticSize = Enum.AutomaticSize.X
-    frame.Position = UDim2.new(0, 12, 0, 12)
-    frame.BackgroundColor3 = CurrentTheme.Card or CurrentTheme.BackgroundSecondary
-    frame.BackgroundTransparency = 0.15
-    frame.BorderSizePixel = 0
-    frame.Parent = wmGui
+    local gui = mk("ScreenGui", {
+        Name = "SxH_Watermark",
+        ResetOnSpawn = false,
+        IgnoreGuiInset = true,
+        DisplayOrder = 50,
+    }, getGuiParent())
 
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 6)
-    corner.Parent = frame
+    local holder = mk("Frame", {
+        Name = "Holder",
+        AnchorPoint = corner.anchor,
+        Position = UDim2.new(corner.anchor.X, offset.X * corner.x, corner.anchor.Y, offset.Y * corner.y),
+        Size = UDim2.fromOffset(0, size),
+        AutomaticSize = Enum.AutomaticSize.X,
+        BackgroundTransparency = 1,
+    }, gui)
+    mk("UIListLayout", {
+        FillDirection = Enum.FillDirection.Horizontal,
+        VerticalAlignment = Enum.VerticalAlignment.Center,
+        HorizontalAlignment = corner.x == 1 and Enum.HorizontalAlignment.Left or Enum.HorizontalAlignment.Right,
+        Padding = UDim.new(0, 8),
+        SortOrder = Enum.SortOrder.LayoutOrder,
+    }, holder)
 
-    local stroke = Instance.new("UIStroke")
-    stroke.Color = CurrentTheme.Accent
-    stroke.Transparency = 0.5
-    stroke.Parent = frame
+    local icon = mk("ImageLabel", {
+        Name = "WatermarkIcon",
+        Size = UDim2.fromOffset(size, size),
+        BackgroundTransparency = 1,
+        ScaleType = Enum.ScaleType.Fit,
+        ImageTransparency = math.clamp(tonumber(GG.WatermarkTransparency) or 0, 0, 1),
+        LayoutOrder = 1,
+    }, holder)
+    if not applyIcon(icon, GG.WatermarkIcon, tint) then
+        icon.Visible = false
+    end
 
-    local pad = Instance.new("UIPadding")
-    pad.PaddingLeft = UDim.new(0, 10)
-    pad.PaddingRight = UDim.new(0, 10)
-    pad.Parent = frame
+    local text = tostring(GG.WatermarkText or "")
+    if text ~= "" then
+        local label = mk("TextLabel", {
+            Name = "WatermarkText",
+            Size = UDim2.fromOffset(0, size),
+            AutomaticSize = Enum.AutomaticSize.X,
+            BackgroundTransparency = 1,
+            Font = Enum.Font.GothamBold,
+            TextSize = 13,
+            TextColor3 = tint or CurrentTheme.TextPrimary,
+            TextStrokeTransparency = 0.6,
+            Text = text,
+            LayoutOrder = 2,
+        }, holder)
 
-    local label = Instance.new("TextLabel")
-    label.BackgroundTransparency = 1
-    label.Size = UDim2.new(0, 0, 1, 0)
-    label.AutomaticSize = Enum.AutomaticSize.X
-    label.Font = Enum.Font.GothamBold
-    label.TextSize = 12
-    label.TextColor3 = CurrentTheme.TextPrimary
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.Parent = frame
-
-    local showText = text or UI_NAME
-    local fps = 0
-    local frames = 0
-    local last = os.clock()
-
-    Library._wm_connection = RunService.RenderStepped:Connect(function()
-        frames += 1
-        local now = os.clock()
-        if now - last >= 1 then
-            fps = frames
-            frames = 0
-            last = now
-            label.Text = string.format("%s  |  %d FPS", showText, fps)
+        -- "{fps}" in the text is replaced by the current frame rate
+        if string.find(text, "{fps}", 1, true) then
+            label.Text = (string.gsub(text, "{fps}", "--"))
+            local frames, last = 0, os.clock()
+            Library._wm_connection = RunService.RenderStepped:Connect(function()
+                frames += 1
+                local now = os.clock()
+                if now - last >= 1 then
+                    label.Text = (string.gsub(text, "{fps}", tostring(frames)))
+                    frames, last = 0, now
+                end
+            end)
         end
-    end)
-    label.Text = showText .. "  |  -- FPS"
+    end
 
-    getgenv().SxH_Watermark = wmGui
-    return wmGui
+    getgenv().SxH_Watermark = gui
+    return gui
+end
+
+-- Change watermark options at runtime: { Icon, Size, Position, Offset, Transparency, Color, Text }
+function Library.SetWatermarkOptions(options)
+    local keys = {
+        Icon = "WatermarkIcon",
+        Size = "WatermarkSize",
+        Position = "WatermarkPosition",
+        Offset = "WatermarkOffset",
+        Transparency = "WatermarkTransparency",
+        Color = "WatermarkColor",
+        Text = "WatermarkText",
+    }
+    for key, ggKey in pairs(keys) do
+        if options and options[key] ~= nil then
+            GG[ggKey] = options[key]
+        end
+    end
+
+    if Library._watermark_on then
+        Library.CreateWatermark()
+    end
+    if Library._refresh_pill_icon then
+        Library._refresh_pill_icon()
+    end
+end
+
+function Library.SetWatermarkIcon(icon)
+    Library.SetWatermarkOptions({ Icon = icon })
 end
 
 -- Turn the watermark on / off (also updates the "Show watermark" pill and saves the choice)
@@ -924,7 +992,7 @@ function Library.SetWatermark(state, silent)
     Library._watermark_on = state and true or false
 
     if Library._watermark_on then
-        Library.CreateWatermark(UI_NAME)
+        Library.CreateWatermark()
     else
         Library.DestroyWatermark()
     end
@@ -1693,8 +1761,11 @@ function Library:create_ui()
     ---------------------------------------------------------------
     -- "Show watermark" pill (bottom-right of the window)
     ---------------------------------------------------------------
-    local Pill = mk('Frame', {
+    local Pill = mk('TextButton', {
         Name = 'WatermarkPill',
+        Text = '',
+        AutoButtonColor = false,
+        ZIndex = 5,
         AnchorPoint = Vector2.new(1, 1),
         Position = UDim2.new(1, -12, 1, -8),
         Size = UDim2.fromOffset(140, 28),
@@ -1708,16 +1779,19 @@ function Library:create_ui()
         Transparency = 0.3,
         ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
     }, Pill)
-    local PillIcon = mk('TextLabel', {
+    local PillIcon = mk('ImageLabel', {
         Name = 'PillIcon',
-        Position = UDim2.fromOffset(9, 0),
-        Size = UDim2.fromOffset(16, 28),
+        Position = UDim2.fromOffset(8, 6),
+        Size = UDim2.fromOffset(16, 16),
         BackgroundTransparency = 1,
-        Font = Enum.Font.GothamBold,
-        TextSize = 12,
-        TextColor3 = CurrentTheme.TextSecondary,
-        Text = '\240\159\145\145',
+        ScaleType = Enum.ScaleType.Fit,
     }, Pill)
+    -- Shows the same image as the watermark (GG.WatermarkIcon)
+    local function refreshPillIcon()
+        PillIcon.Visible = applyIcon(PillIcon, GG.WatermarkIcon, nil)
+    end
+    refreshPillIcon()
+    Library._refresh_pill_icon = refreshPillIcon
     local PillText = mk('TextLabel', {
         Name = 'PillText',
         Position = UDim2.fromOffset(28, 0),
@@ -1730,10 +1804,8 @@ function Library:create_ui()
         TextXAlignment = Enum.TextXAlignment.Left,
     }, Pill)
 
-    local PillTrack = mk('TextButton', {
+    local PillTrack = mk('Frame', {
         Name = 'PillTrack',
-        Text = '',
-        AutoButtonColor = false,
         AnchorPoint = Vector2.new(1, 0.5),
         Position = UDim2.new(1, -10, 0.5, 0),
         Size = UDim2.fromOffset(26, 14),
@@ -1761,7 +1833,8 @@ function Library:create_ui()
     end
     Library._paint_watermark_pill = paintPill
 
-    PillTrack.MouseButton1Click:Connect(function()
+    -- The whole pill is the button
+    Pill.MouseButton1Click:Connect(function()
         Library.SetWatermark(not Library._watermark_on)
     end)
 
@@ -1780,7 +1853,6 @@ function Library:create_ui()
         HintLabel.TextColor3 = CurrentTheme.TextSecondary
         Pill.BackgroundColor3 = CurrentTheme.ModuleBackground
         PillStroke.Color = CurrentTheme.Stroke
-        PillIcon.TextColor3 = CurrentTheme.TextSecondary
         PillText.TextColor3 = CurrentTheme.TextPrimary
         paintPill(Library._watermark_on)
     end)
@@ -2581,8 +2653,39 @@ function Library:create_ui()
         end
     end
 
+    -- After a tab is destroyed: keep LayoutOrder contiguous, move the pin and select a fallback tab
+    function self:renumber_tabs(selectFallback)
+        local tabs = self._tabs or {}
+
+        for index, tabManager in ipairs(tabs) do
+            tabManager.Frame.LayoutOrder = index - 1
+        end
+        self._tab = #tabs
+
+        local selected = nil
+        for _, tabManager in ipairs(tabs) do
+            if tabManager.LeftSection.Visible or tabManager.RightSection.Visible then
+                selected = tabManager
+            end
+        end
+
+        if not selected and selectFallback and tabs[1] then
+            selected = tabs[1]
+            self:update_tabs(selected.Frame)
+            self:update_sections(selected.LeftSection, selected.RightSection)
+        end
+
+        if selected then
+            TweenService:Create(Pin, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+                Position = UDim2.fromScale(0.026, 0.135 + selected.Frame.LayoutOrder * (0.113 / 1.3))
+            }):Play()
+        end
+    end
+
     function self:create_tab(title: string, icon: string)
         local TabManager = {}
+        local window = self
+        self._tabs = self._tabs or {}
 
         local LayoutOrder = 0;
 
@@ -2718,6 +2821,42 @@ function Library:create_ui()
             self:update_sections(LeftSection, RightSection)
         end)
 
+        -- Handles for plugin support: the tab button, both columns and the modules created in this tab
+        TabManager.Frame = Tab
+        TabManager.LeftSection = LeftSection
+        TabManager.RightSection = RightSection
+        TabManager.Modules = {}
+        table.insert(self._tabs, TabManager)
+
+        -- Remove the tab, its columns and every module inside it
+        function TabManager:Destroy()
+            if TabManager._destroyed then
+                return
+            end
+            TabManager._destroyed = true
+
+            local wasSelected = LeftSection.Visible or RightSection.Visible
+
+            for index = #TabManager.Modules, 1, -1 do
+                local moduleManager = TabManager.Modules[index]
+                if moduleManager then
+                    pcall(function() moduleManager:Destroy() end)
+                end
+            end
+            table.clear(TabManager.Modules)
+
+            local position = table.find(window._tabs, TabManager)
+            if position then
+                table.remove(window._tabs, position)
+            end
+
+            Tab:Destroy()
+            LeftSection:Destroy()
+            RightSection:Destroy()
+
+            window:renumber_tabs(wasSelected)
+        end
+
         -- Tab:ProgressBar({ Title, Desc, Value = { Min, Max, Default } ... }) shows in the top-right corner of the window
         function TabManager:ProgressBar(settings)
             return createProgressBar(settings)
@@ -2726,12 +2865,28 @@ function Library:create_ui()
         function TabManager:create_module(settings: any)
 
             local LayoutOrderModule = 0;
+            local ParentTab = self
 
             local ModuleManager = {
                 _state = false,
                 _size = 0,
-                _multiplier = 0
+                _multiplier = 0,
+                _keys = {},         -- keys of Connections owned by this module
+                _connections = {},  -- other connections owned by this module
             }
+
+            -- Remember a key of the shared Connections table so Destroy can disconnect it
+            local function trackKey(key)
+                table.insert(ModuleManager._keys, key)
+                return key
+            end
+
+            -- Connect to a global signal and disconnect it when the module is destroyed
+            local function trackedConnect(signal, handler)
+                local connection = signal:Connect(handler)
+                table.insert(ModuleManager._connections, connection)
+                return connection
+            end
 
             if settings.section == 'right' then
                 settings.section = RightSection
@@ -2755,6 +2910,57 @@ function Library:create_ui()
                 frame = Module,
                 title = string.lower(settings.title or "")
             })
+
+            -- Handles for plugin support
+            ModuleManager.Frame = Module
+            if ParentTab.Modules then
+                table.insert(ParentTab.Modules, ModuleManager)
+            end
+
+            -- Remove the module and every connection it owns
+            function ModuleManager:Destroy()
+                if ModuleManager._destroyed then
+                    return
+                end
+                ModuleManager._destroyed = true
+
+                if Library._close_picker then
+                    pcall(Library._close_picker)
+                end
+
+                for _, connection in ipairs(ModuleManager._connections) do
+                    pcall(function() connection:Disconnect() end)
+                end
+                table.clear(ModuleManager._connections)
+
+                for _, key in ipairs(ModuleManager._keys) do
+                    Connections:disconnect(key)
+                end
+                table.clear(ModuleManager._keys)
+
+                Connections:disconnect(settings.flag .. '_keybind')
+                Connections:disconnect(settings.flag .. '_input_began')
+                if Library._choosing_keybind then
+                    Connections:disconnect('keybind_choose_start')
+                    Library._choosing_keybind = false
+                end
+
+                for index, data in ipairs(Library._all_modules) do
+                    if data.frame == Module then
+                        table.remove(Library._all_modules, index)
+                        break
+                    end
+                end
+
+                if ParentTab.Modules then
+                    local position = table.find(ParentTab.Modules, ModuleManager)
+                    if position then
+                        table.remove(ParentTab.Modules, position)
+                    end
+                end
+
+                Module:Destroy()
+            end
 
             local UIListLayout = Instance.new('UIListLayout')
             UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -3582,6 +3788,7 @@ function Library:create_ui()
                     end
                 end)
                 Connections[settings.flag .. "_keypress"] = keyPressConnection
+                trackKey(settings.flag .. "_keypress")
             
                 return CheckboxManager
             end
@@ -3672,6 +3879,8 @@ function Library:create_ui()
                 LayoutOrderModule = LayoutOrderModule + 1
 
                 local SliderManager = {}
+                trackKey('slider_drag_' .. settings.flag)
+                trackKey('slider_input_' .. settings.flag)
 
                 if self._size == 0 then
                     self._size = 11
@@ -4032,7 +4241,7 @@ function Library:create_ui()
                     end
                 end)
 
-                UserInputService.InputChanged:Connect(function(input)
+                trackedConnect(UserInputService.InputChanged, function(input)
                     if not active_thumb then return end
                     if input.UserInputType ~= Enum.UserInputType.MouseMovement and input.UserInputType ~= Enum.UserInputType.Touch then return end
 
@@ -4048,7 +4257,7 @@ function Library:create_ui()
                     RangeSliderManager:update_positions(false)
                 end)
 
-                UserInputService.InputEnded:Connect(function(input)
+                trackedConnect(UserInputService.InputEnded, function(input)
                     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
                         if active_thumb then
                             RangeSliderManager:update_positions(true)
@@ -4641,6 +4850,8 @@ function Library:create_ui()
                     end
                 end)
                 Connections["keybind_press_" .. settings.flag] = keyPressConnection
+                trackKey("keybind_press_" .. settings.flag)
+                trackKey("keybind_input_" .. settings.flag)
             
                 FeatureButton.MouseButton1Click:Connect(function()
                     if settings.button_callback then
@@ -4999,19 +5210,34 @@ function Library:create_ui()
                     }, Popup)
                     mk("UICorner", { CornerRadius = UDim.new(0, 6) }, Cancel)
 
+                    -- The gradient lives on its own frame: a UIGradient on the button itself would also
+                    -- tint the text (white text x accent gradient = invisible text)
                     local Confirm = mk("TextButton", {
-                        Text = "Confirm",
-                        Font = Enum.Font.GothamBold,
-                        TextSize = 12,
-                        TextColor3 = contrastText(T.Accent),
+                        Name = "Confirm",
+                        Text = "",
                         AutoButtonColor = false,
-                        BackgroundColor3 = Color3.new(1, 1, 1),
+                        BackgroundTransparency = 1,
                         Position = UDim2.fromOffset(196, 251),
                         Size = UDim2.fromOffset(86, 26),
                         BorderSizePixel = 0,
                     }, Popup)
-                    mk("UICorner", { CornerRadius = UDim.new(0, 6) }, Confirm)
-                    mk("UIGradient", { Color = ColorSequence.new(T.Accent, accentB) }, Confirm)
+                    local ConfirmFill = mk("Frame", {
+                        Name = "ConfirmFill",
+                        Size = UDim2.fromScale(1, 1),
+                        BackgroundColor3 = Color3.new(1, 1, 1),
+                        BorderSizePixel = 0,
+                    }, Confirm)
+                    mk("UICorner", { CornerRadius = UDim.new(0, 6) }, ConfirmFill)
+                    mk("UIGradient", { Color = ColorSequence.new(T.Accent, accentB) }, ConfirmFill)
+                    mk("TextLabel", {
+                        Name = "ConfirmText",
+                        Size = UDim2.fromScale(1, 1),
+                        BackgroundTransparency = 1,
+                        Font = Enum.Font.GothamBold,
+                        TextSize = 12,
+                        TextColor3 = contrastText(T.Accent:Lerp(accentB, 0.5)),
+                        Text = "Confirm",
+                    }, Confirm)
 
                     ---------------------------------------------------
                     -- Logic
@@ -5217,7 +5443,7 @@ function Library:create_ui()
                 })
 
                 -- refresh khi có người vào/ra
-                Players.PlayerAdded:Connect(function()
+                trackedConnect(Players.PlayerAdded, function()
                     -- dropdown không rebuild dễ, chỉ notify
                 end)
 
@@ -5259,7 +5485,7 @@ function Library:create_ui()
                 guiObject.MouseLeave:Connect(function()
                     tip.Visible = false
                 end)
-                RunService.RenderStepped:Connect(function()
+                trackedConnect(RunService.RenderStepped, function()
                     if tip.Visible then
                         tip.Position = UDim2.fromOffset(mouse.X + 14, mouse.Y + 12)
                     end
