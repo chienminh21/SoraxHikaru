@@ -1,55 +1,39 @@
-
-
 getgenv().GG = {
     UIName = "Sora x Hikaru",
-    Version = "v1.0",
-    Theme = "Light",
-    Transparency = 0.15,
-    ToggleKey = Enum.KeyCode.Insert,
-    NotifyMode = "old",
-    Watermark = true,
-    ImageBackground = "",
-    ImageBackgroundStyle = "Crop",
+    Version = "v2.0",
+    Theme = "Light",                  -- "Dark" or "Light"
+    Transparency = 0.15,             -- window transparency (0 = solid)
+    ToggleKey = Enum.KeyCode.Insert, -- key that shows / hides the window
+    NotifyMode = "old",              -- notification style: "new" or "old"
+    Watermark = false,                -- icon in a screen corner (also toggled by the "Show watermark" pill)
+    WatermarkIcon = "rbxassetid://76051962811019", -- asset id / image URL / Lucide name
+    WatermarkSize = 40,              -- icon size in pixels
+    WatermarkPosition = "TopLeft",   -- TopLeft | TopRight | BottomLeft | BottomRight
+    WatermarkTransparency = 0,       -- 0 = solid, 1 = invisible
+    WatermarkText = "",              -- optional text next to the icon, "{fps}" shows the FPS
+    ImageBackground = "",            -- "rbxassetid://..." / image URL / "" (none)
+    ImageBackgroundStyle = "Crop",   -- Stretch | Fit | Crop | Tile | FadeLeft | FadeRight | FadeTop | FadeBottom
     ImageBackgroundTransparency = 0.7,
 }
-
---[[
-    2. Load the library and create the window
-]]
 
 local BASE = "https://raw.githubusercontent.com/chienminh21/SoraxHikaru/main/"
 local Library = loadstring(game:HttpGet(BASE .. "Lib/UI.lua"))()
 
 local Window = Library.new()
 
---[[
-    Callbacks run once while the UI is being built.
-    Use ready to prevent side effects during initialization.
-]]
-
+-- Callbacks run once while the UI is being built (with the saved value).
+-- Use this flag to skip side effects (notifications, theme changes...) during that moment.
 local ready = false
-
---[[
-    3. Tabs
-
-    Icon supports Lucide names, Roblox asset IDs and image URLs.
-]]
 
 local Main = Window:create_tab("Main", "home")
 local Visuals = Window:create_tab("Visuals", "eye")
 local Settings = Window:create_tab("Settings", "settings")
 
---[[
-    4. Main tab
-
-    Left column: a module with different controls.
-]]
-
 local Farm = Main:create_module({
     title = "Auto Farm",
     description = "Middle-click the header to set a key",
     flag = "auto_farm",
-    section = "left",
+    section = "left", -- "left" (default) or "right"
     callback = function(state)
         print("Auto Farm:", state)
     end,
@@ -83,7 +67,7 @@ Farm:create_dropdown({
     title = "Target",
     flag = "farm_target",
     options = { "Nearest", "Lowest HP", "Boss" },
-    maximum_options = 6,
+    maximum_options = 6, -- required
     callback = function(option)
         print("Target:", option)
     end,
@@ -96,8 +80,8 @@ Farm:create_dropdown({
     maximum_options = 6,
     multi_dropdown = true,
     callback = function(option)
-        local selectedItems = Library._config._flags.farm_items or {}
-        print("Selected:", table.concat(selectedItems, ", "))
+        -- the selected list is saved in the config flags
+        print("Selected:", table.concat(Library._config._flags.farm_items or {}, ", "))
     end,
 })
 
@@ -118,10 +102,7 @@ Farm:create_textbox({
     end,
 })
 
-Farm:create_divider({
-    showtopic = true,
-    title = "Actions"
-})
+Farm:create_divider({ showtopic = true, title = "Actions" })
 
 Farm:create_button({
     title = "Teleport to spawn",
@@ -129,10 +110,6 @@ Farm:create_button({
         Library.Notify.Info("Teleport", "Teleported to spawn", 3)
     end,
 })
-
---[[
-    Right column: notifications, dialog and progress bar.
-]]
 
 local Demo = Main:create_module({
     title = "Demo",
@@ -142,44 +119,15 @@ local Demo = Main:create_module({
     callback = function() end,
 })
 
-Demo:create_button({
-    title = "Info",
-    callback = function()
-        Library.Notify.Info("Info", "Something happened", 3)
-    end,
-})
-
-Demo:create_button({
-    title = "Success",
-    callback = function()
-        Library.Notify.Success("Success", "It worked!", 3)
-    end,
-})
-
-Demo:create_button({
-    title = "Warning",
-    callback = function()
-        Library.Notify.Warn("Warning", "Be careful", 3)
-    end,
-})
-
-Demo:create_button({
-    title = "Error",
-    callback = function()
-        Library.Notify.Error("Error", "Something broke", 3)
-    end,
-})
+Demo:create_button({ title = "Info", callback = function() Library.Notify.Info("Info", "Something happened", 3) end })
+Demo:create_button({ title = "Success", callback = function() Library.Notify.Success("Success", "It worked!", 3) end })
+Demo:create_button({ title = "Warning", callback = function() Library.Notify.Warn("Warning", "Be careful", 3) end })
+Demo:create_button({ title = "Error", callback = function() Library.Notify.Error("Error", "Something broke", 3) end })
 
 Demo:create_button({
     title = "Notification with icon",
     callback = function()
-        Library.Notify.Send({
-            title = "Coins",
-            text = "+100 coins",
-            type = "success",
-            icon = "coins",
-            duration = 3
-        })
+        Library.Notify.Send({ title = "Coins", text = "+100 coins", type = "success", icon = "coins", duration = 3 })
     end,
 })
 
@@ -213,23 +161,14 @@ Demo:create_button({
     end,
 })
 
---[[
-    Progress bar
-
-    Appears in the top-right corner of the window.
-]]
-
+-- Progress bar: shows in the top-right corner of the window when it is visible
 local Progress = Main:ProgressBar({
     Title = "Download",
     Desc = "Downloading files...",
     Icon = "download",
-    Value = {
-        Min = 0,
-        Max = 100,
-        Default = 0
-    },
-    Visible = false,
-    AutoHide = true,
+    Value = { Min = 0, Max = 100, Default = 0 },
+    Visible = false, -- hidden until we call Progress:Reset() / Progress:Show()
+    AutoHide = true, -- hide itself after it reaches Max
     OnComplete = function()
         Library.Notify.Success("Download", "Finished!", 3)
     end,
@@ -239,15 +178,10 @@ Demo:create_button({
     title = "Run progress (5s)",
     callback = function()
         Progress:Reset()
-        Progress:Run(5)
+        Progress:Run(5) -- or Progress:Set(50) / Progress:Increment(10)
     end,
 })
 
---[[
-    5. Visuals tab
-
-    Color picker, paragraph and text.
-]]
 
 local Esp = Visuals:create_module({
     title = "ESP",
@@ -267,11 +201,7 @@ local espColor = Esp:create_colorpicker({
         print("Color:", color)
     end,
 })
-
---[[
-    espColor:Get() returns the current Color3.
-    espColor:Set(Color3) changes the selected color.
-]]
+-- espColor:Get() returns the Color3, espColor:Set(Color3.new(1, 0, 0)) changes it
 
 Esp:create_paragraph({
     title = "Tip",
@@ -279,20 +209,8 @@ Esp:create_paragraph({
     customScale = 70,
 })
 
-local status = Esp:create_text({
-    text = "Status: idle",
-    CustomYSize = 24
-})
-
-status:Set({
-    text = "Status: ready"
-})
-
---[[
-    6. Settings tab
-
-    Theme, transparency, watermark, background and config.
-]]
+local status = Esp:create_text({ text = "Status: idle", CustomYSize = 24 })
+status:Set({ text = "Status: ready" })
 
 local Interface = Settings:create_module({
     title = "Interface",
@@ -308,9 +226,7 @@ Interface:create_dropdown({
     options = { "Dark", "Light" },
     maximum_options = 2,
     callback = function(option)
-        if ready then
-            Library.SetTheme(option)
-        end
+        if ready then Library.SetTheme(option) end
     end,
 })
 
@@ -320,9 +236,7 @@ Interface:create_dropdown({
     options = { "new", "old" },
     maximum_options = 2,
     callback = function(option)
-        if ready then
-            Library.SetNotifyMode(option)
-        end
+        if ready then Library.SetNotifyMode(option) end
     end,
 })
 
@@ -345,9 +259,16 @@ Interface:create_button({
     end,
 })
 
---[[
-    Background settings
-]]
+Interface:create_textbox({
+    title = "Watermark icon (asset id / URL)",
+    placeholder = "rbxassetid://76051962811019",
+    flag = "ui_watermark_icon",
+    callback = function(text)
+        if ready and text ~= "" then
+            Library.SetWatermarkIcon(text)
+        end
+    end,
+})
 
 local Background = Settings:create_module({
     title = "Background",
@@ -369,16 +290,7 @@ Background:create_textbox({
 Background:create_dropdown({
     title = "Style",
     flag = "bg_style",
-    options = {
-        "Crop",
-        "Stretch",
-        "Fit",
-        "Tile",
-        "FadeLeft",
-        "FadeRight",
-        "FadeTop",
-        "FadeBottom"
-    },
+    options = { "Crop", "Stretch", "Fit", "Tile", "FadeLeft", "FadeRight", "FadeTop", "FadeBottom" },
     maximum_options = 8,
     callback = function(option)
         Window:SetImageBackground(GG.ImageBackground, option)
@@ -393,17 +305,9 @@ Background:create_slider({
     value = 70,
     round_number = true,
     callback = function(value)
-        Window:SetImageBackground(
-            GG.ImageBackground,
-            nil,
-            value / 100
-        )
+        Window:SetImageBackground(GG.ImageBackground, nil, value / 100)
     end,
 })
-
---[[
-    Config settings
-]]
 
 local Config = Settings:create_module({
     title = "Config",
@@ -413,15 +317,8 @@ local Config = Settings:create_module({
     callback = function() end,
 })
 
-Config:create_button({
-    title = "Save config",
-    callback = Library.SaveConfig
-})
-
-Config:create_button({
-    title = "Export to clipboard",
-    callback = Library.ExportConfig
-})
+Config:create_button({ title = "Save config", callback = Library.SaveConfig })
+Config:create_button({ title = "Export to clipboard", callback = Library.ExportConfig })
 
 Config:create_button({
     title = "Reset config...",
@@ -432,31 +329,13 @@ Config:create_button({
             Title = "Reset config?",
             Content = "All saved settings and keybinds will be deleted.",
             Buttons = {
-                {
-                    Title = "Reset",
-                    Icon = "trash-2",
-                    Variant = "Destructive",
-                    Callback = Library.ResetConfig
-                },
-                {
-                    Title = "Cancel",
-                    Icon = "x",
-                    Variant = "Secondary"
-                },
+                { Title = "Reset", Icon = "trash-2", Variant = "Destructive", Callback = Library.ResetConfig },
+                { Title = "Cancel", Icon = "x", Variant = "Secondary" },
             },
         })
     end,
 })
-
--- 7 loader
-
-
-
 Window:load()
 ready = true
 
-Library.Notify.Success(
-    "Sora x Hikaru",
-    "Loaded. Press Insert to hide / show the window.",
-    4
-)
+Library.Notify.Success("Sora x Hikaru", "Loaded. Press Insert to hide / show the window.", 4)
