@@ -8,7 +8,7 @@ getgenv().GG = {
     ToggleKey = Enum.KeyCode.Insert,
     NotifyMode = "old",
     Watermark = true,
-    ImageBackground = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRUC6mkL_t6tMIErXnaEfZSHUn4A4dl0bu7JBVjCVhOXX6v9ERkdV3ViUXp&s=10",
+    ImageBackground = "",
     ImageBackgroundStyle = "Crop",
     ImageBackgroundTransparency = 0.7,
 }
