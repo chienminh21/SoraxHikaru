@@ -2,7 +2,7 @@
 
 getgenv().GG = {
     UIName = "Sora x Hikaru",
-    Version = "v2.0",
+    Version = "v1.0",
     Theme = "Light",
     Transparency = 0.15,
     ToggleKey = Enum.KeyCode.Insert,
