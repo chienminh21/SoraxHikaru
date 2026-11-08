@@ -8,7 +8,6 @@ GG.FolderName = GG.FolderName or "SoraHikaru"
 GG.GuiName = GG.GuiName or "SoraHikaru"
 GG.Transparency = GG.Transparency or 0.15
 GG.Watermark = GG.Watermark ~= false
-GG.WatermarkIcon = GG.WatermarkIcon or "rbxassetid://76051962811019" -- đổi icon ngoài bằng GG.WatermarkIcon
 GG.ToggleKey = GG.ToggleKey or Enum.KeyCode.Insert  -- phím mở/đóng UI
 GG.Animations = GG.Animations ~= false              -- bật/tắt tween
 GG.TextColor = GG.TextColor or nil
@@ -20,6 +19,10 @@ GG.GalacticColor2 = GG.GalacticColor2 or Color3.fromRGB(236, 72, 153)
 GG.GalacticSpeed = GG.GalacticSpeed or 1.5
 GG.Version = GG.Version or "v2.0"                   -- shown in the sidebar info card
 GG.NotifyMode = GG.NotifyMode or nil                -- "new" (default) or "old"; nil = use the saved choice
+GG.ImageBackground = GG.ImageBackground or ""       -- image behind the window: "rbxassetid://..." / image URL / "" (none)
+GG.ImageBackgroundStyle = GG.ImageBackgroundStyle or "Crop"  -- Stretch | Fit | Crop | Tile | FadeLeft | FadeRight | FadeTop | FadeBottom
+GG.ImageBackgroundTransparency = GG.ImageBackgroundTransparency or 0.7
+GG.LucideUrl = GG.LucideUrl or nil                  -- optional custom URL for the Lucide icon library loader
 
 local UI_NAME = GG.UIName
 local FOLDER_NAME = GG.FolderName
@@ -230,6 +233,213 @@ local function mk(class, props, parent)
         object.Parent = parent
     end
     return object
+end
+
+---------------------------------------------------------------------
+-- Icons and images
+--   * Lucide icons by name ("trash-2", "alert-circle", "coin"...) -> https://lucide.dev
+--   * "rbxassetid://123", a bare asset number, or an image URL (https://...)
+--   * a table: { Image = "rbxassetid://...", ImageRectSize = Vector2, ImageRectOffset = Vector2 }
+---------------------------------------------------------------------
+local LucideLib = nil
+local lucideTried = false
+local lucideNames = nil
+local lucideCache = {}
+local imageCache = {}
+
+-- Old Lucide names that were renamed (the bundled Lucide version may only know one of them)
+local ICON_ALIASES = {
+    coin = "coins",
+    money = "banknote",
+    cash = "banknote",
+    ["alert-circle"] = "circle-alert",
+    ["alert-triangle"] = "triangle-alert",
+    ["alert-octagon"] = "octagon-alert",
+    ["check-circle"] = "circle-check",
+    ["check-circle-2"] = "circle-check-big",
+    ["x-circle"] = "circle-x",
+    ["help-circle"] = "circle-help",
+    ["more-horizontal"] = "ellipsis",
+    ["more-vertical"] = "ellipsis-vertical",
+    ["loader-2"] = "loader-circle",
+    home = "house",
+}
+local REVERSE_ALIASES = {}
+for old, new in pairs(ICON_ALIASES) do
+    REVERSE_ALIASES[new] = old
+end
+
+-- Load the Lucide library once (only when an icon name is used)
+local function getLucide()
+    if LucideLib then
+        return LucideLib
+    end
+    if lucideTried then
+        return nil
+    end
+    lucideTried = true
+
+    local urls = {}
+    if type(GG.LucideUrl) == "string" and GG.LucideUrl ~= "" then
+        table.insert(urls, GG.LucideUrl)
+    end
+    table.insert(urls, "https://github.com/latte-soft/lucide-roblox/releases/latest/download/lucide-roblox.luau")
+    table.insert(urls, "https://github.com/latte-soft/lucide-roblox/releases/download/0.1.3/lucide-roblox.luau")
+
+    for _, url in ipairs(urls) do
+        local ok, lib = pcall(function()
+            return loadstring(game:HttpGet(url))()
+        end)
+        if ok and type(lib) == "table" and lib.GetAsset then
+            LucideLib = lib
+            break
+        end
+    end
+
+    if LucideLib then
+        lucideNames = {}
+        for _, iconName in ipairs(LucideLib.IconNames or {}) do
+            lucideNames[iconName] = true
+        end
+    else
+        warn("[Sora x Hikaru] Could not load the Lucide icon library, icons given by name will not show")
+    end
+
+    return LucideLib
+end
+
+-- Returns { Url, ImageRectSize, ImageRectOffset } for a Lucide icon name, or nil
+local function lucideAsset(name, size)
+    local lib = getLucide()
+    if not lib then
+        return nil
+    end
+
+    name = string.lower(tostring(name))
+    name = (string.gsub(name, "^lucide[:%-]", ""))
+
+    local key = name .. "@" .. tostring(size)
+    if lucideCache[key] ~= nil then
+        return lucideCache[key] or nil
+    end
+
+    local candidates = { name }
+    if ICON_ALIASES[name] then table.insert(candidates, ICON_ALIASES[name]) end
+    if REVERSE_ALIASES[name] then table.insert(candidates, REVERSE_ALIASES[name]) end
+
+    for _, candidate in ipairs(candidates) do
+        if not lucideNames or lucideNames[candidate] then
+            local ok, asset = pcall(lib.GetAsset, candidate, size)
+            if ok and asset then
+                lucideCache[key] = asset
+                return asset
+            end
+        end
+    end
+
+    lucideCache[key] = false
+    return nil
+end
+
+local function hashString(text)
+    local hash = 5381
+    for index = 1, #text do
+        hash = (hash * 33 + string.byte(text, index)) % 4294967296
+    end
+    return string.format("%08x", hash)
+end
+
+-- Turns an asset id / number / URL into something an ImageLabel can show (nil if not possible)
+local function resolveImageContent(source)
+    if source == nil or source == "" then
+        return nil
+    end
+    if type(source) == "number" then
+        return "rbxassetid://" .. tostring(source)
+    end
+    if type(source) ~= "string" then
+        return nil
+    end
+
+    if string.match(source, "^rbxassetid://") or string.match(source, "^rbxasset://") or string.match(source, "^rbxthumb://") then
+        return source
+    end
+    if string.match(source, "^%d+$") then
+        return "rbxassetid://" .. source
+    end
+
+    -- Image from the internet: download once, then load it from the workspace folder
+    if string.match(source, "^https?://") then
+        if imageCache[source] then
+            return imageCache[source]
+        end
+        if not (writefile and getcustomasset and isfile) then
+            return nil
+        end
+
+        local ok, content = pcall(function()
+            pcall(function()
+                if not isfolder(FOLDER_NAME .. "/images") then
+                    makefolder(FOLDER_NAME .. "/images")
+                end
+            end)
+            local path = FOLDER_NAME .. "/images/" .. hashString(source) .. ".png"
+            if not isfile(path) then
+                writefile(path, game:HttpGet(source))
+            end
+            return getcustomasset(path)
+        end)
+
+        if ok and content then
+            imageCache[source] = content
+            return content
+        end
+    end
+
+    return nil
+end
+
+-- Put an icon on an ImageLabel. `tint` recolors it (Lucide icons are white, so tinting works well).
+-- Returns true when something was applied.
+local function applyIcon(label, icon, tint)
+    if not label or icon == nil or icon == "" then
+        return false
+    end
+
+    label.ImageRectOffset = Vector2.new(0, 0)
+    label.ImageRectSize = Vector2.new(0, 0)
+
+    if type(icon) == "table" then
+        local content = resolveImageContent(icon.Image or icon.Url or icon[1])
+        if not content then
+            return false
+        end
+        label.Image = content
+        if icon.ImageRectSize then label.ImageRectSize = icon.ImageRectSize end
+        if icon.ImageRectOffset then label.ImageRectOffset = icon.ImageRectOffset end
+        if tint then label.ImageColor3 = tint end
+        return true
+    end
+
+    local content = resolveImageContent(icon)
+    if content then
+        label.Image = content
+        if tint then label.ImageColor3 = tint end
+        return true
+    end
+
+    if type(icon) == "string" then
+        local asset = lucideAsset(icon, 48)
+        if asset then
+            label.Image = asset.Url
+            label.ImageRectSize = asset.ImageRectSize
+            label.ImageRectOffset = asset.ImageRectOffset
+            if tint then label.ImageColor3 = tint end
+            return true
+        end
+    end
+
+    return false
 end
 
 local Connections = setmetatable({
@@ -522,6 +732,11 @@ local Library = {
 Library.__index = Library
 Library.SetTheme = Library_SetTheme
 
+-- Icon helpers (also usable from your own scripts)
+Library.ApplyIcon = applyIcon                       -- Library.ApplyIcon(imageLabel, "trash-2", optionalTintColor)
+Library.GetImage = resolveImageContent              -- turns an asset id / number / URL into an image string
+Library.GetLucideIcon = function(name, size) return lucideAsset(name, size or 48) end
+
 -- Make sure the config always has the sub tables the library expects
 Library._config._flags = Library._config._flags or {}
 Library._config._keybinds = Library._config._keybinds or {}
@@ -643,64 +858,37 @@ end
 function Library.CreateWatermark(text)
     Library.DestroyWatermark()
 
-    local iconId = GG.WatermarkIcon or "rbxassetid://76051962811019"
-    if type(iconId) == "number" then
-        iconId = "rbxassetid://" .. tostring(iconId)
-    end
-
     local wmGui = Instance.new("ScreenGui")
     wmGui.Name = "SxH_Watermark"
     wmGui.ResetOnSpawn = false
     wmGui.IgnoreGuiInset = true
     wmGui.DisplayOrder = 50
-    pcall(function()
-        wmGui.Parent = (gethui and gethui()) or CoreGui
-    end)
-    if not wmGui.Parent then
-        wmGui.Parent = CoreGui
-    end
+    wmGui.Parent = CoreGui
 
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0, 0, 0, 30)
+    frame.Size = UDim2.new(0, 0, 0, 28)
     frame.AutomaticSize = Enum.AutomaticSize.X
     frame.Position = UDim2.new(0, 12, 0, 12)
     frame.BackgroundColor3 = CurrentTheme.Card or CurrentTheme.BackgroundSecondary
-    frame.BackgroundTransparency = 0.12
+    frame.BackgroundTransparency = 0.15
     frame.BorderSizePixel = 0
     frame.Parent = wmGui
 
     local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 8)
+    corner.CornerRadius = UDim.new(0, 6)
     corner.Parent = frame
 
     local stroke = Instance.new("UIStroke")
     stroke.Color = CurrentTheme.Accent
-    stroke.Transparency = 0.45
+    stroke.Transparency = 0.5
     stroke.Parent = frame
 
-    local layout = Instance.new("UIListLayout")
-    layout.FillDirection = Enum.FillDirection.Horizontal
-    layout.VerticalAlignment = Enum.VerticalAlignment.Center
-    layout.Padding = UDim.new(0, 8)
-    layout.Parent = frame
-
     local pad = Instance.new("UIPadding")
-    pad.PaddingLeft = UDim.new(0, 8)
+    pad.PaddingLeft = UDim.new(0, 10)
     pad.PaddingRight = UDim.new(0, 10)
-    pad.PaddingTop = UDim.new(0, 4)
-    pad.PaddingBottom = UDim.new(0, 4)
     pad.Parent = frame
 
-    local icon = Instance.new("ImageLabel")
-    icon.Name = "Icon"
-    icon.Size = UDim2.fromOffset(18, 18)
-    icon.BackgroundTransparency = 1
-    icon.Image = iconId
-    icon.ScaleType = Enum.ScaleType.Fit
-    icon.Parent = frame
-
     local label = Instance.new("TextLabel")
-    label.Name = "Label"
     label.BackgroundTransparency = 1
     label.Size = UDim2.new(0, 0, 1, 0)
     label.AutomaticSize = Enum.AutomaticSize.X
@@ -1025,15 +1213,33 @@ local function sendNew(settings)
         BorderSizePixel = 0,
     }, inner)
     mk("UICorner", { CornerRadius = UDim.new(1, 0) }, icon)
-    mk("TextLabel", {
-        Name = "Symbol",
-        Size = UDim2.fromScale(1, 1),
-        BackgroundTransparency = 1,
-        Font = Enum.Font.GothamBold,
-        TextSize = 13,
-        TextColor3 = contrastText(style.color),
-        Text = style.symbol,
-    }, icon)
+    -- settings.icon (Lucide name / asset id / URL) replaces the default symbol
+    local iconApplied = false
+    if settings.icon then
+        local symbolImage = mk("ImageLabel", {
+            Name = "SymbolImage",
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.fromScale(0.5, 0.5),
+            Size = UDim2.fromOffset(14, 14),
+            BackgroundTransparency = 1,
+            ImageColor3 = contrastText(style.color),
+        }, icon)
+        iconApplied = applyIcon(symbolImage, settings.icon)
+        if not iconApplied then
+            symbolImage:Destroy()
+        end
+    end
+    if not iconApplied then
+        mk("TextLabel", {
+            Name = "Symbol",
+            Size = UDim2.fromScale(1, 1),
+            BackgroundTransparency = 1,
+            Font = Enum.Font.GothamBold,
+            TextSize = 13,
+            TextColor3 = contrastText(style.color),
+            Text = style.symbol,
+        }, icon)
+    end
 
     local content = mk("Frame", {
         Name = "Content",
@@ -1629,6 +1835,598 @@ function Library:create_ui()
         Connections:disconnect_all()
     end)
 
+    ---------------------------------------------------------------
+    -- Image background
+    --   GG.ImageBackground = "rbxassetid://..." / image URL / ""   (empty = none)
+    --   GG.ImageBackgroundStyle = Stretch | Fit | Crop | Tile | FadeLeft | FadeRight | FadeTop | FadeBottom
+    --   GG.ImageBackgroundTransparency = 0..1
+    ---------------------------------------------------------------
+    local BgImage = nil
+    local BgGradient = nil
+
+    local BG_STYLES = {
+        Stretch = { scale = Enum.ScaleType.Stretch },
+        Fit = { scale = Enum.ScaleType.Fit },
+        Crop = { scale = Enum.ScaleType.Crop },
+        Tile = { scale = Enum.ScaleType.Tile },
+        FadeLeft = { scale = Enum.ScaleType.Crop, rotation = 0 },
+        FadeRight = { scale = Enum.ScaleType.Crop, rotation = 180 },
+        FadeTop = { scale = Enum.ScaleType.Crop, rotation = 90 },
+        FadeBottom = { scale = Enum.ScaleType.Crop, rotation = 270 },
+    }
+
+    function Library.SetImageBackground(image, style, transparency)
+        GG.ImageBackground = image or ""
+        if style then GG.ImageBackgroundStyle = style end
+        if transparency ~= nil then GG.ImageBackgroundTransparency = transparency end
+
+        local content = resolveImageContent(GG.ImageBackground)
+        if not content then
+            if BgImage then BgImage.Visible = false end
+            return false
+        end
+
+        if not BgImage then
+            -- ZIndex 0 keeps it behind everything inside the window
+            BgImage = mk('ImageLabel', {
+                Name = 'ImageBackground',
+                Size = UDim2.fromScale(1, 1),
+                BackgroundTransparency = 1,
+                BorderSizePixel = 0,
+                ZIndex = 0,
+            }, Container)
+            BgGradient = mk('UIGradient', {
+                Enabled = false,
+                Transparency = NumberSequence.new({
+                    NumberSequenceKeypoint.new(0, 1),
+                    NumberSequenceKeypoint.new(1, 0),
+                }),
+            }, BgImage)
+        end
+
+        local definition = BG_STYLES[GG.ImageBackgroundStyle] or BG_STYLES.Crop
+        BgImage.Image = content
+        BgImage.ScaleType = definition.scale
+        BgImage.TileSize = UDim2.fromOffset(128, 128)
+        BgImage.ImageTransparency = math.clamp(tonumber(GG.ImageBackgroundTransparency) or 0.7, 0, 1)
+        BgGradient.Enabled = definition.rotation ~= nil
+        BgGradient.Rotation = definition.rotation or 0
+        BgImage.Visible = true
+        return true
+    end
+
+    function self:SetImageBackground(image, style, transparency)
+        return Library.SetImageBackground(image, style, transparency)
+    end
+
+    local initialBackground = (GG.ImageBackground ~= "" and GG.ImageBackground) or GG.BackgroundImage or ""
+    Library.SetImageBackground(initialBackground)
+
+    ---------------------------------------------------------------
+    -- Dialog (modal window with icon, title, text and buttons)
+    --   Window:Dialog({ Icon, IconThemed, Title, Content, Dismissible, Buttons = {
+    --       { Title, Icon, Variant = "Primary" | "Secondary" | "Destructive" | "Tertiary", Callback, Close = true } } })
+    ---------------------------------------------------------------
+    function self:Dialog(config)
+        config = config or {}
+        local T = CurrentTheme
+        local closed = false
+        local accentB = T.Accent:Lerp(Color3.fromRGB(139, 92, 246), 0.55)
+
+        local Overlay = mk('TextButton', {
+            Name = 'DialogOverlay',
+            Text = '',
+            AutoButtonColor = false,
+            Position = UDim2.new(0, 0, 0, -100),
+            Size = UDim2.new(1, 0, 1, 100),
+            BackgroundColor3 = Color3.new(0, 0, 0),
+            BackgroundTransparency = 1,
+            BorderSizePixel = 0,
+            ZIndex = 100,
+        }, MainGui)
+
+        local Card = mk('Frame', {
+            Name = 'DialogCard',
+            Active = true,
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.new(0.5, 0, 0.5, 50),
+            Size = UDim2.new(0, 300, 0, 0),
+            AutomaticSize = Enum.AutomaticSize.Y,
+            BackgroundColor3 = T.ModuleBackground,
+            BorderSizePixel = 0,
+            ZIndex = 101,
+        }, Overlay)
+        mk('UICorner', { CornerRadius = UDim.new(0, 14) }, Card)
+        mk('UIStroke', { Color = T.Stroke, Thickness = 1.5, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, Card)
+        local CardScale = mk('UIScale', { Scale = 0.92 }, Card)
+        local targetScale = math.clamp((workspace.CurrentCamera.ViewportSize.X - 24) / 324, 0.6, 1)
+        mk('UIPadding', {
+            PaddingTop = UDim.new(0, 18),
+            PaddingBottom = UDim.new(0, 16),
+            PaddingLeft = UDim.new(0, 18),
+            PaddingRight = UDim.new(0, 18),
+        }, Card)
+        mk('UIListLayout', { Padding = UDim.new(0, 12), SortOrder = Enum.SortOrder.LayoutOrder }, Card)
+
+        -- Header: icon + title
+        local Header = mk('Frame', {
+            Name = 'DialogHeader',
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 24),
+            LayoutOrder = 1,
+        }, Card)
+
+        local titleX = 0
+        if config.Icon ~= nil and config.Icon ~= '' then
+            local DialogIcon = mk('ImageLabel', {
+                Name = 'DialogIcon',
+                AnchorPoint = Vector2.new(0, 0.5),
+                Position = UDim2.new(0, 0, 0.5, 0),
+                Size = UDim2.fromOffset(22, 22),
+                BackgroundTransparency = 1,
+                ZIndex = 102,
+            }, Header)
+            if applyIcon(DialogIcon, config.Icon, config.IconThemed and T.Accent or nil) then
+                titleX = 30
+            else
+                DialogIcon:Destroy()
+            end
+        end
+
+        mk('TextLabel', {
+            Name = 'DialogTitle',
+            Position = UDim2.fromOffset(titleX, 0),
+            Size = UDim2.new(1, -titleX, 1, 0),
+            BackgroundTransparency = 1,
+            Font = Enum.Font.GothamBold,
+            TextSize = 15,
+            TextColor3 = T.TextPrimary,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextTruncate = Enum.TextTruncate.AtEnd,
+            Text = tostring(config.Title or 'Dialog'),
+            ZIndex = 102,
+        }, Header)
+
+        if config.Content and config.Content ~= '' then
+            mk('TextLabel', {
+                Name = 'DialogContent',
+                Size = UDim2.new(1, 0, 0, 0),
+                AutomaticSize = Enum.AutomaticSize.Y,
+                BackgroundTransparency = 1,
+                Font = Enum.Font.Gotham,
+                TextSize = 12,
+                TextColor3 = T.TextSecondary,
+                TextWrapped = true,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                TextYAlignment = Enum.TextYAlignment.Top,
+                Text = tostring(config.Content),
+                LayoutOrder = 2,
+                ZIndex = 102,
+            }, Card)
+        end
+
+        local Row = mk('Frame', {
+            Name = 'DialogButtons',
+            BackgroundTransparency = 1,
+            Size = UDim2.new(1, 0, 0, 30),
+            LayoutOrder = 3,
+        }, Card)
+        mk('UIListLayout', {
+            FillDirection = Enum.FillDirection.Horizontal,
+            HorizontalAlignment = Enum.HorizontalAlignment.Right,
+            VerticalAlignment = Enum.VerticalAlignment.Center,
+            Padding = UDim.new(0, 8),
+            SortOrder = Enum.SortOrder.LayoutOrder,
+        }, Row)
+
+        local dialog = {}
+
+        local function close()
+            if closed then return end
+            closed = true
+            TweenService:Create(Overlay, TweenInfo.new(0.2), { BackgroundTransparency = 1 }):Play()
+            local out = TweenService:Create(CardScale, TweenInfo.new(0.2, Enum.EasingStyle.Quint, Enum.EasingDirection.In), { Scale = 0.92 })
+            out:Play()
+            out.Completed:Once(function()
+                Overlay:Destroy()
+            end)
+        end
+        dialog.Close = close
+        dialog.Destroy = close
+        dialog.Overlay = Overlay
+
+        local buttons = config.Buttons
+        if type(buttons) ~= 'table' or #buttons == 0 then
+            buttons = { { Title = 'OK', Variant = 'Primary' } }
+        end
+
+        for index, info in ipairs(buttons) do
+            local variant = info.Variant or (index == 1 and 'Primary' or 'Secondary')
+            local background, foreground = T.Card, T.TextPrimary
+            local backgroundTransparency = 0
+            local useStroke, useGradient = true, false
+
+            if variant == 'Primary' then
+                background, foreground = Color3.new(1, 1, 1), contrastText(T.Accent)
+                useStroke, useGradient = false, true
+            elseif variant == 'Destructive' then
+                background, foreground = Color3.fromRGB(240, 85, 85), Color3.new(1, 1, 1)
+                useStroke = false
+            elseif variant == 'Tertiary' then
+                backgroundTransparency, foreground = 1, T.TextSecondary
+                useStroke = false
+            end
+
+            local Button = mk('TextButton', {
+                Name = 'DialogButton',
+                Text = '',
+                AutoButtonColor = false,
+                AutomaticSize = Enum.AutomaticSize.X,
+                Size = UDim2.new(0, 0, 1, 0),
+                BackgroundColor3 = background,
+                BackgroundTransparency = backgroundTransparency,
+                BorderSizePixel = 0,
+                LayoutOrder = index,
+                ZIndex = 102,
+            }, Row)
+            mk('UICorner', { CornerRadius = UDim.new(0, 8) }, Button)
+            mk('UIPadding', { PaddingLeft = UDim.new(0, 14), PaddingRight = UDim.new(0, 14) }, Button)
+            if useStroke then
+                mk('UIStroke', { Color = T.Stroke, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, Button)
+            end
+            if useGradient then
+                mk('UIGradient', { Color = ColorSequence.new(T.Accent, accentB) }, Button)
+            end
+
+            local Inner = mk('Frame', {
+                BackgroundTransparency = 1,
+                AutomaticSize = Enum.AutomaticSize.X,
+                Size = UDim2.new(0, 0, 1, 0),
+                ZIndex = 103,
+            }, Button)
+            mk('UIListLayout', {
+                FillDirection = Enum.FillDirection.Horizontal,
+                VerticalAlignment = Enum.VerticalAlignment.Center,
+                Padding = UDim.new(0, 6),
+                SortOrder = Enum.SortOrder.LayoutOrder,
+            }, Inner)
+
+            if info.Icon ~= nil and info.Icon ~= '' then
+                local ButtonIcon = mk('ImageLabel', {
+                    Name = 'ButtonIcon',
+                    Size = UDim2.fromOffset(14, 14),
+                    BackgroundTransparency = 1,
+                    ImageColor3 = foreground,
+                    LayoutOrder = 1,
+                    ZIndex = 104,
+                }, Inner)
+                if not applyIcon(ButtonIcon, info.Icon) then
+                    ButtonIcon:Destroy()
+                end
+            end
+
+            mk('TextLabel', {
+                Name = 'ButtonText',
+                AutomaticSize = Enum.AutomaticSize.X,
+                Size = UDim2.new(0, 0, 1, 0),
+                BackgroundTransparency = 1,
+                Font = Enum.Font.GothamMedium,
+                TextSize = 12,
+                TextColor3 = foreground,
+                Text = tostring(info.Title or 'Button'),
+                LayoutOrder = 2,
+                ZIndex = 104,
+            }, Inner)
+
+            Button.MouseEnter:Connect(function()
+                if variant == 'Primary' or variant == 'Destructive' then
+                    TweenService:Create(Button, TweenInfo.new(0.15), { BackgroundTransparency = 0.12 }):Play()
+                elseif variant == 'Tertiary' then
+                    TweenService:Create(Button, TweenInfo.new(0.15), { BackgroundTransparency = 0.6 }):Play()
+                else
+                    TweenService:Create(Button, TweenInfo.new(0.15), { BackgroundColor3 = T.Card:Lerp(T.Accent, 0.15) }):Play()
+                end
+            end)
+            Button.MouseLeave:Connect(function()
+                TweenService:Create(Button, TweenInfo.new(0.15), {
+                    BackgroundTransparency = backgroundTransparency,
+                    BackgroundColor3 = background,
+                }):Play()
+            end)
+
+            Button.MouseButton1Click:Connect(function()
+                if info.Callback then
+                    local ok, err = pcall(info.Callback)
+                    if not ok then
+                        warn('[Sora x Hikaru] dialog callback error:', err)
+                    end
+                end
+                if info.Close ~= false then
+                    close()
+                end
+            end)
+        end
+
+        Overlay.MouseButton1Click:Connect(function()
+            if config.Dismissible then
+                close()
+            end
+        end)
+
+        TweenService:Create(Overlay, TweenInfo.new(0.2), { BackgroundTransparency = 0.45 }):Play()
+        TweenService:Create(CardScale, TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), { Scale = targetScale }):Play()
+
+        return dialog
+    end
+
+    ---------------------------------------------------------------
+    -- Progress bar (small card in the top-right corner of the window)
+    --   Tab:ProgressBar({ Title, Desc, Icon, Value = { Min, Max, Default },
+    --       Callback(value), OnComplete(), AutoHide = true, HideDelay = 1.5, Closable = true, Visible = true })
+    --   Methods: Set, Increment, Get, SetTitle, SetDesc, SetRange, Run(seconds), Stop, Reset, Show, Hide, Destroy
+    ---------------------------------------------------------------
+    local ProgressHolder = mk('Frame', {
+        Name = 'ProgressHolder',
+        AnchorPoint = Vector2.new(1, 0),
+        Position = UDim2.new(1, -12, 0, 10),
+        Size = UDim2.new(0, 214, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        BackgroundTransparency = 1,
+        ZIndex = 20,
+    }, Handler)
+    mk('UIListLayout', {
+        Padding = UDim.new(0, 6),
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        HorizontalAlignment = Enum.HorizontalAlignment.Right,
+    }, ProgressHolder)
+    local progressOrder = 0
+
+    local function createProgressBar(settings)
+        settings = settings or {}
+        local T = CurrentTheme
+        local valueConfig = settings.Value or {}
+        local minValue = tonumber(valueConfig.Min) or 0
+        local maxValue = tonumber(valueConfig.Max) or 100
+        local value = math.clamp(tonumber(valueConfig.Default) or minValue, minValue, maxValue)
+        local completed = false
+        local runToken = 0
+        local destroyed = false
+        local autoHide = settings.AutoHide ~= false
+        local hideDelay = tonumber(settings.HideDelay) or 1.5
+        progressOrder += 1
+
+        local Card = mk('CanvasGroup', {
+            Name = 'ProgressCard',
+            Size = UDim2.new(0, 214, 0, 54),
+            BackgroundColor3 = T.ModuleBackground,
+            BackgroundTransparency = 0.05,
+            BorderSizePixel = 0,
+            GroupTransparency = 1,
+            LayoutOrder = progressOrder,
+            Visible = settings.Visible ~= false,
+            ZIndex = 21,
+        }, ProgressHolder)
+        mk('UICorner', { CornerRadius = UDim.new(0, 10) }, Card)
+        mk('UIStroke', { Color = T.Stroke, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, Card)
+
+        local titleX = 12
+        if settings.Icon ~= nil and settings.Icon ~= '' then
+            local CardIcon = mk('ImageLabel', {
+                Name = 'ProgressIcon',
+                Position = UDim2.fromOffset(10, 7),
+                Size = UDim2.fromOffset(14, 14),
+                BackgroundTransparency = 1,
+                ImageColor3 = T.Accent,
+            }, Card)
+            if applyIcon(CardIcon, settings.Icon) then
+                titleX = 30
+            else
+                CardIcon:Destroy()
+            end
+        end
+
+        local TitleLabel = mk('TextLabel', {
+            Name = 'ProgressTitle',
+            Position = UDim2.fromOffset(titleX, 7),
+            Size = UDim2.new(1, -(titleX + 62), 0, 14),
+            BackgroundTransparency = 1,
+            Font = Enum.Font.GothamBold,
+            TextSize = 11,
+            TextColor3 = T.TextPrimary,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextTruncate = Enum.TextTruncate.AtEnd,
+            Text = tostring(settings.Title or 'Progress'),
+        }, Card)
+
+        local PercentLabel = mk('TextLabel', {
+            Name = 'ProgressPercent',
+            AnchorPoint = Vector2.new(1, 0),
+            Position = UDim2.new(1, -28, 0, 7),
+            Size = UDim2.fromOffset(40, 14),
+            BackgroundTransparency = 1,
+            Font = Enum.Font.GothamMedium,
+            TextSize = 10,
+            TextColor3 = T.TextSecondary,
+            TextXAlignment = Enum.TextXAlignment.Right,
+            Text = '0%',
+        }, Card)
+
+        local CloseButton = mk('TextButton', {
+            Name = 'ProgressClose',
+            AnchorPoint = Vector2.new(1, 0),
+            Position = UDim2.new(1, -8, 0, 7),
+            Size = UDim2.fromOffset(14, 14),
+            BackgroundTransparency = 1,
+            Font = Enum.Font.GothamBold,
+            TextSize = 10,
+            TextColor3 = T.TextSecondary,
+            Text = 'X',
+            AutoButtonColor = false,
+            Visible = settings.Closable ~= false,
+        }, Card)
+
+        local DescLabel = mk('TextLabel', {
+            Name = 'ProgressDesc',
+            Position = UDim2.fromOffset(12, 23),
+            Size = UDim2.new(1, -24, 0, 12),
+            BackgroundTransparency = 1,
+            Font = Enum.Font.Gotham,
+            TextSize = 10,
+            TextColor3 = T.TextSecondary,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextTruncate = Enum.TextTruncate.AtEnd,
+            Text = tostring(settings.Desc or ''),
+        }, Card)
+
+        local Track = mk('Frame', {
+            Name = 'ProgressTrack',
+            Position = UDim2.fromOffset(12, 40),
+            Size = UDim2.new(1, -24, 0, 6),
+            BackgroundColor3 = T.Card,
+            BorderSizePixel = 0,
+        }, Card)
+        mk('UICorner', { CornerRadius = UDim.new(1, 0) }, Track)
+
+        local Fill = mk('Frame', {
+            Name = 'ProgressFill',
+            Size = UDim2.new(0, 0, 1, 0),
+            BackgroundColor3 = Color3.new(1, 1, 1),
+            BorderSizePixel = 0,
+        }, Track)
+        mk('UICorner', { CornerRadius = UDim.new(1, 0) }, Fill)
+        mk('UIGradient', { Color = ColorSequence.new(T.Accent, T.AccentHover or T.Accent) }, Fill)
+
+        local manager = {}
+
+        local function render()
+            local fraction = (maxValue == minValue) and 1 or math.clamp((value - minValue) / (maxValue - minValue), 0, 1)
+            PercentLabel.Text = string.format('%d%%', math.floor(fraction * 100 + 0.5))
+            TweenService:Create(Fill, TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+                Size = UDim2.new(fraction, 0, 1, 0),
+            }):Play()
+        end
+
+        function manager:Show()
+            if destroyed then return end
+            Card.Visible = true
+            TweenService:Create(Card, TweenInfo.new(0.25), { GroupTransparency = 0 }):Play()
+        end
+
+        function manager:Hide()
+            if destroyed then return end
+            local fade = TweenService:Create(Card, TweenInfo.new(0.25), { GroupTransparency = 1 })
+            fade:Play()
+            fade.Completed:Once(function()
+                if not destroyed then
+                    Card.Visible = false
+                end
+            end)
+        end
+
+        function manager:Destroy()
+            destroyed = true
+            runToken += 1
+            Card:Destroy()
+        end
+
+        function manager:Set(newValue)
+            if destroyed then return end
+            value = math.clamp(tonumber(newValue) or value, minValue, maxValue)
+            render()
+
+            if settings.Callback then
+                pcall(settings.Callback, value)
+            end
+
+            if value >= maxValue then
+                if not completed then
+                    completed = true
+                    if settings.OnComplete then
+                        pcall(settings.OnComplete)
+                    end
+                    if autoHide then
+                        task.delay(hideDelay, function()
+                            if completed and not destroyed then
+                                manager:Hide()
+                            end
+                        end)
+                    end
+                end
+            else
+                completed = false
+            end
+        end
+
+        function manager:Increment(amount)
+            manager:Set(value + (tonumber(amount) or 1))
+        end
+
+        function manager:Get()
+            return value
+        end
+
+        function manager:SetTitle(text)
+            TitleLabel.Text = tostring(text)
+        end
+
+        function manager:SetDesc(text)
+            DescLabel.Text = tostring(text)
+        end
+
+        function manager:SetRange(newMin, newMax)
+            minValue = tonumber(newMin) or minValue
+            maxValue = tonumber(newMax) or maxValue
+            manager:Set(value)
+        end
+
+        -- Fill the bar up to the max over `seconds`
+        function manager:Run(seconds)
+            runToken += 1
+            local token = runToken
+            local startValue = value
+            local duration = math.max(tonumber(seconds) or 5, 0.1)
+            manager:Show()
+            task.spawn(function()
+                local elapsed = 0
+                while token == runToken and not destroyed and elapsed < duration do
+                    elapsed += task.wait(0.05)
+                    manager:Set(startValue + (maxValue - startValue) * math.min(elapsed / duration, 1))
+                end
+            end)
+        end
+
+        function manager:Stop()
+            runToken += 1
+        end
+
+        function manager:Reset()
+            runToken += 1
+            completed = false
+            value = minValue
+            render()
+            manager:Show()
+        end
+
+        CloseButton.MouseButton1Click:Connect(function()
+            runToken += 1
+            manager:Hide()
+        end)
+
+        render()
+        if Card.Visible then
+            TweenService:Create(Card, TweenInfo.new(0.25), { GroupTransparency = 0 }):Play()
+        end
+        if value >= maxValue then
+            completed = true
+        end
+
+        return manager
+    end
+
+    function self:ProgressBar(settings)
+        return createProgressBar(settings)
+    end
+
     function self:Update1Run(a)
         if a == "nil" then
             Container.BackgroundTransparency = 0.05
@@ -1848,7 +2646,7 @@ function Library:create_ui()
         Icon.BackgroundTransparency = 1
         Icon.Position = UDim2.new(0.10000000149011612, 0, 0.5, 0)
         Icon.Name = 'Icon'
-        Icon.Image = icon
+        applyIcon(Icon, icon)  -- Lucide name, rbxassetid://, number or URL
         Icon.Size = UDim2.new(0, 12, 0, 12)
         Icon.BorderSizePixel = 0
         Icon.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
@@ -1919,6 +2717,11 @@ function Library:create_ui()
             self:update_tabs(Tab, LeftSection, RightSection)
             self:update_sections(LeftSection, RightSection)
         end)
+
+        -- Tab:ProgressBar({ Title, Desc, Value = { Min, Max, Default } ... }) shows in the top-right corner of the window
+        function TabManager:ProgressBar(settings)
+            return createProgressBar(settings)
+        end
 
         function TabManager:create_module(settings: any)
 
@@ -1995,6 +2798,11 @@ function Library:create_ui()
             Icon.BorderSizePixel = 0
             Icon.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
             Icon.Parent = Header
+            if settings.icon then
+                -- Lucide name / asset id / URL for this module (tinted with the accent color)
+                applyIcon(Icon, settings.icon, CurrentTheme.Accent)
+                Icon.ImageTransparency = 0.3
+            end
             
             local ModuleName = Instance.new('TextLabel')
             ModuleName.FontFace = Font.new('rbxasset://fonts/families/GothamSSm.json', Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
@@ -4192,28 +5000,18 @@ function Library:create_ui()
                     mk("UICorner", { CornerRadius = UDim.new(0, 6) }, Cancel)
 
                     local Confirm = mk("TextButton", {
-                        Text = "",
+                        Text = "Confirm",
+                        Font = Enum.Font.GothamBold,
+                        TextSize = 12,
+                        TextColor3 = contrastText(T.Accent),
                         AutoButtonColor = false,
                         BackgroundColor3 = Color3.new(1, 1, 1),
                         Position = UDim2.fromOffset(196, 251),
                         Size = UDim2.fromOffset(86, 26),
                         BorderSizePixel = 0,
-                        ZIndex = 51,
                     }, Popup)
                     mk("UICorner", { CornerRadius = UDim.new(0, 6) }, Confirm)
                     mk("UIGradient", { Color = ColorSequence.new(T.Accent, accentB) }, Confirm)
-                    -- Text on a separate label so gradient never hides "Confirm"
-                    mk("TextLabel", {
-                        Name = "ConfirmLabel",
-                        Text = "Confirm",
-                        Font = Enum.Font.GothamBold,
-                        TextSize = 12,
-                        TextColor3 = Color3.fromRGB(255, 255, 255),
-                        TextTransparency = 0,
-                        BackgroundTransparency = 1,
-                        Size = UDim2.fromScale(1, 1),
-                        ZIndex = 52,
-                    }, Confirm)
 
                     ---------------------------------------------------
                     -- Logic
@@ -4473,141 +5271,6 @@ function Library:create_ui()
             return ModuleManager
         end
 
-        -- Progress bar (top-right of window)
-        function TabManager:ProgressBar(settings)
-            settings = settings or {}
-            local minV = (settings.Value and settings.Value.Min) or 0
-            local maxV = (settings.Value and settings.Value.Max) or 100
-            local curV = (settings.Value and settings.Value.Default) or minV
-            local autoHide = settings.AutoHide ~= false
-            local onComplete = settings.OnComplete
-            local visible = settings.Visible == true
-
-            local parentGui = Library._ui
-            if not parentGui then
-                return { Set = function() end, Run = function() end, Reset = function() end, Show = function() end, Hide = function() end }
-            end
-
-            local holder = Instance.new("Frame")
-            holder.Name = "ProgressBar"
-            holder.AnchorPoint = Vector2.new(1, 0)
-            holder.Position = UDim2.new(1, -16, 0, 16)
-            holder.Size = UDim2.fromOffset(260, 64)
-            holder.BackgroundColor3 = CurrentTheme.ModuleBackground
-            holder.BackgroundTransparency = 0.05
-            holder.BorderSizePixel = 0
-            holder.Visible = visible
-            holder.ZIndex = 80
-            holder.Parent = parentGui
-
-            local corner = Instance.new("UICorner")
-            corner.CornerRadius = UDim.new(0, 10)
-            corner.Parent = holder
-
-            local stroke = Instance.new("UIStroke")
-            stroke.Color = CurrentTheme.Stroke
-            stroke.Transparency = 0.3
-            stroke.Parent = holder
-
-            local title = Instance.new("TextLabel")
-            title.BackgroundTransparency = 1
-            title.Position = UDim2.fromOffset(12, 8)
-            title.Size = UDim2.new(1, -24, 0, 16)
-            title.Font = Enum.Font.GothamBold
-            title.TextSize = 12
-            title.TextColor3 = CurrentTheme.TextPrimary
-            title.TextXAlignment = Enum.TextXAlignment.Left
-            title.Text = settings.Title or "Progress"
-            title.ZIndex = 81
-            title.Parent = holder
-
-            local desc = Instance.new("TextLabel")
-            desc.BackgroundTransparency = 1
-            desc.Position = UDim2.fromOffset(12, 26)
-            desc.Size = UDim2.new(1, -24, 0, 14)
-            desc.Font = Enum.Font.Gotham
-            desc.TextSize = 11
-            desc.TextColor3 = CurrentTheme.TextSecondary
-            desc.TextXAlignment = Enum.TextXAlignment.Left
-            desc.Text = settings.Desc or ""
-            desc.ZIndex = 81
-            desc.Parent = holder
-
-            local track = Instance.new("Frame")
-            track.Position = UDim2.fromOffset(12, 46)
-            track.Size = UDim2.new(1, -24, 0, 8)
-            track.BackgroundColor3 = CurrentTheme.Card
-            track.BorderSizePixel = 0
-            track.ZIndex = 81
-            track.Parent = holder
-            local trackCorner = Instance.new("UICorner")
-            trackCorner.CornerRadius = UDim.new(1, 0)
-            trackCorner.Parent = track
-
-            local fill = Instance.new("Frame")
-            fill.Size = UDim2.new(0, 0, 1, 0)
-            fill.BackgroundColor3 = CurrentTheme.Accent
-            fill.BorderSizePixel = 0
-            fill.ZIndex = 82
-            fill.Parent = track
-            local fillCorner = Instance.new("UICorner")
-            fillCorner.CornerRadius = UDim.new(1, 0)
-            fillCorner.Parent = fill
-
-            local function ratio()
-                if maxV <= minV then return 0 end
-                return math.clamp((curV - minV) / (maxV - minV), 0, 1)
-            end
-
-            local function paint()
-                fill.Size = UDim2.new(ratio(), 0, 1, 0)
-            end
-            paint()
-
-            local api = {}
-            function api:Set(value)
-                curV = math.clamp(tonumber(value) or curV, minV, maxV)
-                paint()
-            end
-            function api:Show()
-                holder.Visible = true
-            end
-            function api:Hide()
-                holder.Visible = false
-            end
-            function api:Reset()
-                curV = minV
-                paint()
-                holder.Visible = settings.Visible == true
-            end
-            function api:Run(seconds)
-                seconds = tonumber(seconds) or 3
-                holder.Visible = true
-                curV = minV
-                paint()
-                local start = os.clock()
-                local conn
-                conn = RunService.RenderStepped:Connect(function()
-                    local t = (os.clock() - start) / seconds
-                    if t >= 1 then
-                        curV = maxV
-                        paint()
-                        conn:Disconnect()
-                        if onComplete then pcall(onComplete) end
-                        if autoHide then
-                            task.delay(0.6, function()
-                                if holder then holder.Visible = false end
-                            end)
-                        end
-                        return
-                    end
-                    curV = minV + (maxV - minV) * t
-                    paint()
-                end)
-            end
-            return api
-        end
-
         return TabManager
     end
 
@@ -4628,96 +5291,6 @@ function Library:create_ui()
         self._ui_open = not self._ui_open
         self:change_visiblity(self._ui_open)
     end)
-
-    function self:Dialog(settings)
-        settings = settings or {}
-        local parent = Library._ui or CoreGui
-
-        local overlay = Instance.new("Frame")
-        overlay.Name = "DialogOverlay"
-        overlay.Size = UDim2.fromScale(1, 1)
-        overlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-        overlay.BackgroundTransparency = 0.45
-        overlay.BorderSizePixel = 0
-        overlay.ZIndex = 200
-        overlay.Parent = parent
-
-        local box = Instance.new("Frame")
-        box.AnchorPoint = Vector2.new(0.5, 0.5)
-        box.Position = UDim2.fromScale(0.5, 0.5)
-        box.Size = UDim2.fromOffset(320, 160)
-        box.BackgroundColor3 = CurrentTheme.ModuleBackground
-        box.BorderSizePixel = 0
-        box.ZIndex = 201
-        box.Parent = overlay
-        local boxCorner = Instance.new("UICorner")
-        boxCorner.CornerRadius = UDim.new(0, 12)
-        boxCorner.Parent = box
-        local boxStroke = Instance.new("UIStroke")
-        boxStroke.Color = CurrentTheme.Stroke
-        boxStroke.Parent = box
-
-        local title = Instance.new("TextLabel")
-        title.BackgroundTransparency = 1
-        title.Position = UDim2.fromOffset(16, 14)
-        title.Size = UDim2.new(1, -32, 0, 22)
-        title.Font = Enum.Font.GothamBold
-        title.TextSize = 15
-        title.TextColor3 = CurrentTheme.TextPrimary
-        title.TextXAlignment = Enum.TextXAlignment.Left
-        title.Text = settings.Title or "Confirm"
-        title.ZIndex = 202
-        title.Parent = box
-
-        local content = Instance.new("TextLabel")
-        content.BackgroundTransparency = 1
-        content.Position = UDim2.fromOffset(16, 44)
-        content.Size = UDim2.new(1, -32, 0, 50)
-        content.Font = Enum.Font.Gotham
-        content.TextSize = 12
-        content.TextColor3 = CurrentTheme.TextSecondary
-        content.TextXAlignment = Enum.TextXAlignment.Left
-        content.TextYAlignment = Enum.TextYAlignment.Top
-        content.TextWrapped = true
-        content.Text = settings.Content or ""
-        content.ZIndex = 202
-        content.Parent = box
-
-        local function close()
-            overlay:Destroy()
-        end
-
-        local buttons = settings.Buttons or { { Title = "OK", Callback = function() end } }
-        local count = #buttons
-        local width = 90
-        local gap = 8
-        local total = count * width + math.max(count - 1, 0) * gap
-        local startX = (320 - total) / 2
-
-        for i, btn in ipairs(buttons) do
-            local b = Instance.new("TextButton")
-            b.Size = UDim2.fromOffset(width, 30)
-            b.Position = UDim2.fromOffset(startX + (i - 1) * (width + gap), 112)
-            b.BackgroundColor3 = (btn.Variant == "Destructive") and Color3.fromRGB(220, 70, 70) or CurrentTheme.Accent
-            b.Text = btn.Title or "OK"
-            b.Font = Enum.Font.GothamBold
-            b.TextSize = 12
-            b.TextColor3 = Color3.fromRGB(255, 255, 255)
-            b.AutoButtonColor = false
-            b.BorderSizePixel = 0
-            b.ZIndex = 202
-            b.Parent = box
-            local bc = Instance.new("UICorner")
-            bc.CornerRadius = UDim.new(0, 8)
-            bc.Parent = b
-            b.MouseButton1Click:Connect(function()
-                if btn.Callback then pcall(btn.Callback) end
-                close()
-            end)
-        end
-
-        return { Close = close }
-    end
 
     return self
 end
