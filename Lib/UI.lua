@@ -4473,6 +4473,141 @@ function Library:create_ui()
             return ModuleManager
         end
 
+        -- Progress bar (top-right of window)
+        function TabManager:ProgressBar(settings)
+            settings = settings or {}
+            local minV = (settings.Value and settings.Value.Min) or 0
+            local maxV = (settings.Value and settings.Value.Max) or 100
+            local curV = (settings.Value and settings.Value.Default) or minV
+            local autoHide = settings.AutoHide ~= false
+            local onComplete = settings.OnComplete
+            local visible = settings.Visible == true
+
+            local parentGui = Library._ui
+            if not parentGui then
+                return { Set = function() end, Run = function() end, Reset = function() end, Show = function() end, Hide = function() end }
+            end
+
+            local holder = Instance.new("Frame")
+            holder.Name = "ProgressBar"
+            holder.AnchorPoint = Vector2.new(1, 0)
+            holder.Position = UDim2.new(1, -16, 0, 16)
+            holder.Size = UDim2.fromOffset(260, 64)
+            holder.BackgroundColor3 = CurrentTheme.ModuleBackground
+            holder.BackgroundTransparency = 0.05
+            holder.BorderSizePixel = 0
+            holder.Visible = visible
+            holder.ZIndex = 80
+            holder.Parent = parentGui
+
+            local corner = Instance.new("UICorner")
+            corner.CornerRadius = UDim.new(0, 10)
+            corner.Parent = holder
+
+            local stroke = Instance.new("UIStroke")
+            stroke.Color = CurrentTheme.Stroke
+            stroke.Transparency = 0.3
+            stroke.Parent = holder
+
+            local title = Instance.new("TextLabel")
+            title.BackgroundTransparency = 1
+            title.Position = UDim2.fromOffset(12, 8)
+            title.Size = UDim2.new(1, -24, 0, 16)
+            title.Font = Enum.Font.GothamBold
+            title.TextSize = 12
+            title.TextColor3 = CurrentTheme.TextPrimary
+            title.TextXAlignment = Enum.TextXAlignment.Left
+            title.Text = settings.Title or "Progress"
+            title.ZIndex = 81
+            title.Parent = holder
+
+            local desc = Instance.new("TextLabel")
+            desc.BackgroundTransparency = 1
+            desc.Position = UDim2.fromOffset(12, 26)
+            desc.Size = UDim2.new(1, -24, 0, 14)
+            desc.Font = Enum.Font.Gotham
+            desc.TextSize = 11
+            desc.TextColor3 = CurrentTheme.TextSecondary
+            desc.TextXAlignment = Enum.TextXAlignment.Left
+            desc.Text = settings.Desc or ""
+            desc.ZIndex = 81
+            desc.Parent = holder
+
+            local track = Instance.new("Frame")
+            track.Position = UDim2.fromOffset(12, 46)
+            track.Size = UDim2.new(1, -24, 0, 8)
+            track.BackgroundColor3 = CurrentTheme.Card
+            track.BorderSizePixel = 0
+            track.ZIndex = 81
+            track.Parent = holder
+            local trackCorner = Instance.new("UICorner")
+            trackCorner.CornerRadius = UDim.new(1, 0)
+            trackCorner.Parent = track
+
+            local fill = Instance.new("Frame")
+            fill.Size = UDim2.new(0, 0, 1, 0)
+            fill.BackgroundColor3 = CurrentTheme.Accent
+            fill.BorderSizePixel = 0
+            fill.ZIndex = 82
+            fill.Parent = track
+            local fillCorner = Instance.new("UICorner")
+            fillCorner.CornerRadius = UDim.new(1, 0)
+            fillCorner.Parent = fill
+
+            local function ratio()
+                if maxV <= minV then return 0 end
+                return math.clamp((curV - minV) / (maxV - minV), 0, 1)
+            end
+
+            local function paint()
+                fill.Size = UDim2.new(ratio(), 0, 1, 0)
+            end
+            paint()
+
+            local api = {}
+            function api:Set(value)
+                curV = math.clamp(tonumber(value) or curV, minV, maxV)
+                paint()
+            end
+            function api:Show()
+                holder.Visible = true
+            end
+            function api:Hide()
+                holder.Visible = false
+            end
+            function api:Reset()
+                curV = minV
+                paint()
+                holder.Visible = settings.Visible == true
+            end
+            function api:Run(seconds)
+                seconds = tonumber(seconds) or 3
+                holder.Visible = true
+                curV = minV
+                paint()
+                local start = os.clock()
+                local conn
+                conn = RunService.RenderStepped:Connect(function()
+                    local t = (os.clock() - start) / seconds
+                    if t >= 1 then
+                        curV = maxV
+                        paint()
+                        conn:Disconnect()
+                        if onComplete then pcall(onComplete) end
+                        if autoHide then
+                            task.delay(0.6, function()
+                                if holder then holder.Visible = false end
+                            end)
+                        end
+                        return
+                    end
+                    curV = minV + (maxV - minV) * t
+                    paint()
+                end)
+            end
+            return api
+        end
+
         return TabManager
     end
 
@@ -4493,6 +4628,96 @@ function Library:create_ui()
         self._ui_open = not self._ui_open
         self:change_visiblity(self._ui_open)
     end)
+
+    function self:Dialog(settings)
+        settings = settings or {}
+        local parent = Library._ui or CoreGui
+
+        local overlay = Instance.new("Frame")
+        overlay.Name = "DialogOverlay"
+        overlay.Size = UDim2.fromScale(1, 1)
+        overlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+        overlay.BackgroundTransparency = 0.45
+        overlay.BorderSizePixel = 0
+        overlay.ZIndex = 200
+        overlay.Parent = parent
+
+        local box = Instance.new("Frame")
+        box.AnchorPoint = Vector2.new(0.5, 0.5)
+        box.Position = UDim2.fromScale(0.5, 0.5)
+        box.Size = UDim2.fromOffset(320, 160)
+        box.BackgroundColor3 = CurrentTheme.ModuleBackground
+        box.BorderSizePixel = 0
+        box.ZIndex = 201
+        box.Parent = overlay
+        local boxCorner = Instance.new("UICorner")
+        boxCorner.CornerRadius = UDim.new(0, 12)
+        boxCorner.Parent = box
+        local boxStroke = Instance.new("UIStroke")
+        boxStroke.Color = CurrentTheme.Stroke
+        boxStroke.Parent = box
+
+        local title = Instance.new("TextLabel")
+        title.BackgroundTransparency = 1
+        title.Position = UDim2.fromOffset(16, 14)
+        title.Size = UDim2.new(1, -32, 0, 22)
+        title.Font = Enum.Font.GothamBold
+        title.TextSize = 15
+        title.TextColor3 = CurrentTheme.TextPrimary
+        title.TextXAlignment = Enum.TextXAlignment.Left
+        title.Text = settings.Title or "Confirm"
+        title.ZIndex = 202
+        title.Parent = box
+
+        local content = Instance.new("TextLabel")
+        content.BackgroundTransparency = 1
+        content.Position = UDim2.fromOffset(16, 44)
+        content.Size = UDim2.new(1, -32, 0, 50)
+        content.Font = Enum.Font.Gotham
+        content.TextSize = 12
+        content.TextColor3 = CurrentTheme.TextSecondary
+        content.TextXAlignment = Enum.TextXAlignment.Left
+        content.TextYAlignment = Enum.TextYAlignment.Top
+        content.TextWrapped = true
+        content.Text = settings.Content or ""
+        content.ZIndex = 202
+        content.Parent = box
+
+        local function close()
+            overlay:Destroy()
+        end
+
+        local buttons = settings.Buttons or { { Title = "OK", Callback = function() end } }
+        local count = #buttons
+        local width = 90
+        local gap = 8
+        local total = count * width + math.max(count - 1, 0) * gap
+        local startX = (320 - total) / 2
+
+        for i, btn in ipairs(buttons) do
+            local b = Instance.new("TextButton")
+            b.Size = UDim2.fromOffset(width, 30)
+            b.Position = UDim2.fromOffset(startX + (i - 1) * (width + gap), 112)
+            b.BackgroundColor3 = (btn.Variant == "Destructive") and Color3.fromRGB(220, 70, 70) or CurrentTheme.Accent
+            b.Text = btn.Title or "OK"
+            b.Font = Enum.Font.GothamBold
+            b.TextSize = 12
+            b.TextColor3 = Color3.fromRGB(255, 255, 255)
+            b.AutoButtonColor = false
+            b.BorderSizePixel = 0
+            b.ZIndex = 202
+            b.Parent = box
+            local bc = Instance.new("UICorner")
+            bc.CornerRadius = UDim.new(0, 8)
+            bc.Parent = b
+            b.MouseButton1Click:Connect(function()
+                if btn.Callback then pcall(btn.Callback) end
+                close()
+            end)
+        end
+
+        return { Close = close }
+    end
 
     return self
 end
