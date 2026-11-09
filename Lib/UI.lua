@@ -17,6 +17,7 @@ GG.GalacticText = GG.GalacticText ~= false
 GG.GalacticColor1 = GG.GalacticColor1 or Color3.fromRGB(99, 102, 241)
 GG.GalacticColor2 = GG.GalacticColor2 or Color3.fromRGB(236, 72, 153)
 GG.GalacticSpeed = GG.GalacticSpeed or 1.5
+GG.Themes = GG.Themes or nil                       -- custom themes: { Ocean = { Base = "Dark", Accent = Color3... } }
 GG.Version = GG.Version or "v2.0"                   -- shown in the sidebar info card
 GG.NotifyMode = GG.NotifyMode or nil                -- "new" (default) or "old"; nil = use the saved choice
 GG.ImageBackground = GG.ImageBackground or ""       -- image behind the window: "rbxassetid://..." / image URL / "" (none)
@@ -56,7 +57,10 @@ GG.Language = GG.Language or {
 
 local SelectedLanguage = GG.SelectedLanguage or "en"
 
--- Theme Colors
+-- Assigned in the library section below; the theme functions need it
+local Library
+
+-- Theme Colors (Light and Dark are built in, add your own with GG.Themes or Library.AddTheme)
 local Theme = {
     Light = {
         Background = Color3.fromRGB(245, 247, 250),
@@ -86,20 +90,56 @@ local Theme = {
     }
 }
 
-local CurrentTheme = Theme[GG.Theme] or Theme.Dark
+local BUILT_IN_THEMES = { Light = true, Dark = true }
 
--- Apply custom colors if user set
-if GG.TextColor then
-    CurrentTheme.TextPrimary = GG.TextColor
-end
-if GG.TextSecondaryColor then
-    CurrentTheme.TextSecondary = GG.TextSecondaryColor
-end
-if GG.AccentColor then
-    CurrentTheme.Accent = GG.AccentColor
-    CurrentTheme.AccentHover = GG.AccentColor:Lerp(Color3.new(1,1,1), 0.2)
+-- Every color a theme can set
+local THEME_KEYS = {
+    Background = true,
+    BackgroundSecondary = true,
+    ModuleBackground = true,
+    TextPrimary = true,
+    TextSecondary = true,
+    Accent = true,
+    AccentHover = true,
+    Stroke = true,
+    Divider = true,
+    ToggleOff = true,
+    Card = true,
+}
+
+-- Builds a full theme from a partial one: missing colors come from `Base` (default "Dark")
+local function buildTheme(definition)
+    local base = Theme[definition.Base] or Theme.Dark
+    local result = {}
+
+    for key, value in pairs(base) do
+        result[key] = value
+    end
+    for key, value in pairs(definition) do
+        if THEME_KEYS[key] and typeof(value) == "Color3" then
+            result[key] = value
+        end
+    end
+    if typeof(definition.Accent) == "Color3" and typeof(definition.AccentHover) ~= "Color3" then
+        result.AccentHover = definition.Accent:Lerp(Color3.new(1, 1, 1), 0.2)
+    end
+
+    return result
 end
 
+-- Themes given before the library loads: getgenv().GG = { Themes = { Ocean = { Base = "Dark", Accent = ... } } }
+if type(GG.Themes) == "table" then
+    for name, definition in pairs(GG.Themes) do
+        if type(definition) == "table" and not BUILT_IN_THEMES[name] then
+            Theme[name] = buildTheme(definition)
+        end
+    end
+end
+
+-- The active colors (a copy, so switching themes never edits the theme tables)
+local CurrentTheme = {}
+
+-- Copies a theme into `target` and applies the GG color overrides
 local function applyThemeColors(target, source)
     for k, v in pairs(source) do
         target[k] = v
@@ -108,21 +148,18 @@ local function applyThemeColors(target, source)
     if GG.TextSecondaryColor then target.TextSecondary = GG.TextSecondaryColor end
     if GG.AccentColor then
         target.Accent = GG.AccentColor
-        target.AccentHover = GG.AccentColor:Lerp(Color3.new(1,1,1), 0.2)
+        target.AccentHover = GG.AccentColor:Lerp(Color3.new(1, 1, 1), 0.2)
     end
 end
 
-function Library_SetTheme(name)
-    name = name or "Dark"
-    if name ~= "Dark" and name ~= "Light" then
-        name = "Dark"
-    end
-    GG.Theme = name
-    local src = Theme[name] or Theme.Dark
-    applyThemeColors(CurrentTheme, src)
+if not Theme[GG.Theme] then
+    GG.Theme = "Dark"
+end
+applyThemeColors(CurrentTheme, Theme[GG.Theme])
 
+-- Repaints everything that is already on screen with the colors in CurrentTheme
+local function repaintTheme()
     -- Color picker popups are parented separately from the main interface.
-    -- Update them explicitly whenever the active theme changes.
     for index = #Library._color_popups, 1, -1 do
         local updatePopupTheme = Library._color_popups[index]
         if updatePopupTheme then
@@ -147,25 +184,35 @@ function Library_SetTheme(name)
                 continue
             end
 
-            if obj.Name == "Module" and obj:IsA("Frame") then
+            local name = obj.Name
+
+            if name == "Module" and obj:IsA("Frame") then
                 obj.BackgroundColor3 = CurrentTheme.ModuleBackground
                 local st = obj:FindFirstChildOfClass("UIStroke")
                 if st then st.Color = CurrentTheme.Stroke end
-            elseif obj.Name == "Paragraph" or obj.Name == "Text" then
+            elseif name == "Paragraph" or name == "Text" then
                 obj.BackgroundColor3 = CurrentTheme.Card
-            elseif obj.Name == "Divider" and obj:IsA("Frame") then
+            elseif name == "ControlDivider" then
+                -- the divider control follows the UI text color
+                obj.BackgroundColor3 = CurrentTheme.TextPrimary
+            elseif name == "Divider" and obj:IsA("Frame") then
                 obj.BackgroundColor3 = CurrentTheme.Stroke
-            elseif obj:IsA("UIStroke") then
-                if obj.Parent and (obj.Parent.Name == "Module" or obj.Parent.Name == "Container" or obj.Parent.Name == "Paragraph") then
-                    obj.Color = CurrentTheme.Stroke
-                end
+            elseif obj:IsA("Frame") and (name == "Drag" or name == "Fill" or name == "Box" or name == "Keybind" or name == "KeybindBox" or name == "Pin") then
+                obj.BackgroundColor3 = CurrentTheme.Accent
+            elseif obj:IsA("TextBox") and name == "Textbox" then
+                obj.BackgroundColor3 = CurrentTheme.Accent
+                obj.TextColor3 = CurrentTheme.TextPrimary
             elseif obj:IsA("TextLabel") or obj:IsA("TextBox") then
-                local n = obj.Name
-                if n == "ModuleName" or n == "ClientName" then
+                if name == "ClientName" then
+                    -- with the galactic effect the text stays white and the gradient does the coloring
+                    if not GG.GalacticText then
+                        obj.TextColor3 = CurrentTheme.Accent
+                    end
+                elseif name == "ModuleName" then
                     obj.TextColor3 = CurrentTheme.Accent
-                elseif n == "Description" or n == "Value" or n == "CurrentOption" then
+                elseif name == "Description" or name == "Value" or name == "CurrentOption" then
                     obj.TextColor3 = CurrentTheme.TextSecondary
-                elseif n ~= "Option" and n ~= "KeybindLabel" then
+                elseif name ~= "Option" and name ~= "KeybindLabel" then
                     -- general labels
                     if obj.TextTransparency < 0.5 then
                         obj.TextColor3 = CurrentTheme.TextPrimary
@@ -185,6 +232,16 @@ function Library_SetTheme(name)
     for _, hook in ipairs(Library._theme_hooks or {}) do
         pcall(hook)
     end
+end
+
+-- Switch to any registered theme: "Dark", "Light" or a custom one
+function Library_SetTheme(name)
+    if not Theme[name] then
+        name = "Dark"
+    end
+    GG.Theme = name
+    applyThemeColors(CurrentTheme, Theme[name])
+    repaintTheme()
 
     if Library.Notify then
         Library.Notify.Success("Theme", "Switched to " .. name, 2)
@@ -717,7 +774,7 @@ local Config = setmetatable({
 }, Config)
 
 
-local Library = {
+Library = {
     _config = Config:load(game.GameId),
 
     _choosing_keybind = false,
@@ -743,6 +800,64 @@ Library.SetTheme = Library_SetTheme
 Library._connections = Connections
 function Library.SaveSilent()
     Config:save(game.GameId, Library._config)
+end
+
+-- Theme API ---------------------------------------------------------
+-- Library.AddTheme("Ocean", { Base = "Dark", Accent = Color3.fromRGB(0, 170, 255) })
+-- Library.SetTheme("Ocean")
+function Library.AddTheme(name, definition)
+    if type(name) ~= "string" or name == "" then
+        error("theme name must be a non-empty string", 2)
+    end
+    if type(definition) ~= "table" then
+        error("a theme must be a table of colors", 2)
+    end
+    if BUILT_IN_THEMES[name] then
+        error('"' .. name .. '" is a built-in theme, pick another name', 2)
+    end
+    Theme[name] = buildTheme(definition)
+    return name
+end
+
+function Library.GetThemes()
+    local names = {}
+    for name in pairs(Theme) do
+        table.insert(names, name)
+    end
+    table.sort(names)
+    return names
+end
+
+function Library.GetTheme()
+    return GG.Theme
+end
+
+function Library.GetThemeColors()
+    return table.clone(CurrentTheme)
+end
+
+-- Change one color of the active theme and repaint. Text and accent colors also stay after SetTheme.
+-- Keys: Background, BackgroundSecondary, ModuleBackground, TextPrimary, TextSecondary, Accent,
+-- AccentHover, Stroke, Divider, ToggleOff, Card
+function Library.SetThemeColor(key, color)
+    if not THEME_KEYS[key] then
+        error('unknown theme color "' .. tostring(key) .. '"', 2)
+    end
+    if typeof(color) ~= "Color3" then
+        error("the color must be a Color3", 2)
+    end
+
+    CurrentTheme[key] = color
+    if key == "Accent" then
+        CurrentTheme.AccentHover = color:Lerp(Color3.new(1, 1, 1), 0.2)
+        GG.AccentColor = color
+    elseif key == "TextPrimary" then
+        GG.TextColor = color
+    elseif key == "TextSecondary" then
+        GG.TextSecondaryColor = color
+    end
+
+    repaintTheme()
 end
 
 -- Icon helpers (also usable from your own scripts)
@@ -3842,9 +3957,9 @@ function Library:create_ui()
                     -- Create the inner divider frame that will be placed in the middle of the OuterFrame
                     local Divider = Instance.new('Frame')
                     Divider.Size = UDim2.new(1, 0, 0, dividerHeight)
-                    Divider.BackgroundColor3 = Color3.fromRGB(255, 255, 255) -- White color
+                    Divider.BackgroundColor3 = CurrentTheme.TextPrimary -- same color as the UI text
                     Divider.BorderSizePixel = 0
-                    Divider.Name = 'Divider'
+                    Divider.Name = 'ControlDivider'
                     Divider.Parent = OuterFrame
                     Divider.ZIndex = 2;
                     Divider.Position = UDim2.new(0, 0, 0.5, -dividerHeight / 2) -- Center the divider vertically in the OuterFrame
@@ -3853,9 +3968,9 @@ function Library:create_ui()
                     local Gradient = Instance.new('UIGradient')
                     Gradient.Parent = Divider
                     Gradient.Color = ColorSequence.new({
-                        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),  -- Start with white
+                        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),  -- white keeps the divider's own color
                         ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 255, 255)), -- Keep it white in the middle
-                        ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 255, 255, 0))  -- Fade to transparent on the right side
+                        ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 255, 255))  -- the fade comes from Transparency below
                     })
                     Gradient.Transparency = NumberSequence.new({
                         NumberSequenceKeypoint.new(0, 1),   
@@ -4920,11 +5035,7 @@ function Library:create_ui()
                 return Button
             end
 
-            -- ===================== Color Picker =====================
-            -- A swatch row that opens a popup: saturation/value square, hue bar,
-            -- hex box with copy button, preset colors and Cancel / Confirm.
-            -- settings: { title, flag, default = Color3, callback = function(color) end, notify = true }
-            function ModuleManager:create_colorpicker(settings: any)
+         function ModuleManager:create_colorpicker(settings: any)
                 LayoutOrderModule = LayoutOrderModule + 1
 
                 if self._size == 0 then self._size = 11 end
@@ -5239,10 +5350,7 @@ function Library:create_ui()
                         Text = "Confirm",
                     }, Confirm)
 
-                    ---------------------------------------------------
-                    -- Logic
-                    ---------------------------------------------------
-                    -- Redraw knobs, hue tint and hex text. `exact` keeps an exact color (typed hex / presets)
+                 -- Redraw knobs, hue tint and hex text. `exact` keeps an exact color (typed hex / presets)
                     local function refresh(exact)
                         working = exact or Color3.fromHSV(h, sat, val)
                         SV.BackgroundColor3 = Color3.fromHSV(h, 1, 1)
