@@ -1,0 +1,1353 @@
+--- /tmp/UI.before.lua	2026-11-08 02:32:47.366480522 +0000
++++ /tmp/UI.after.lua	2026-11-09 05:11:18.842627274 +0000
+@@ -17,12 +17,22 @@
+ GG.GalacticColor1 = GG.GalacticColor1 or Color3.fromRGB(99, 102, 241)
+ GG.GalacticColor2 = GG.GalacticColor2 or Color3.fromRGB(236, 72, 153)
+ GG.GalacticSpeed = GG.GalacticSpeed or 1.5
++GG.Search = GG.Search ~= false                      -- circle search button in the top-right corner
++GG.SearchKey = GG.SearchKey or Enum.KeyCode.F       -- Ctrl + this key opens the search
++GG.Themes = GG.Themes or nil                       -- custom themes: { Ocean = { Base = "Dark", Accent = Color3... } }
+ GG.Version = GG.Version or "v2.0"                   -- shown in the sidebar info card
+ GG.NotifyMode = GG.NotifyMode or nil                -- "new" (default) or "old"; nil = use the saved choice
+ GG.ImageBackground = GG.ImageBackground or ""       -- image behind the window: "rbxassetid://..." / image URL / "" (none)
+ GG.ImageBackgroundStyle = GG.ImageBackgroundStyle or "Crop"  -- Stretch | Fit | Crop | Tile | FadeLeft | FadeRight | FadeTop | FadeBottom
+ GG.ImageBackgroundTransparency = GG.ImageBackgroundTransparency or 0.7
+ GG.LucideUrl = GG.LucideUrl or nil                  -- optional custom URL for the Lucide icon library loader
++GG.WatermarkIcon = GG.WatermarkIcon or "rbxassetid://76051962811019"  -- watermark image: asset id / image URL / Lucide name
++GG.WatermarkSize = GG.WatermarkSize or 40           -- icon size in pixels
++GG.WatermarkPosition = GG.WatermarkPosition or "TopLeft"  -- TopLeft | TopRight | BottomLeft | BottomRight
++GG.WatermarkOffset = GG.WatermarkOffset or Vector2.new(12, 12)  -- distance from the screen corner
++GG.WatermarkTransparency = GG.WatermarkTransparency or 0  -- 0 = solid, 1 = invisible
++GG.WatermarkColor = GG.WatermarkColor or nil        -- optional tint (Color3)
++GG.WatermarkText = GG.WatermarkText or ""           -- optional text next to the icon, "{fps}" shows the FPS ("" = none)
+ 
+ local UI_NAME = GG.UIName
+ local FOLDER_NAME = GG.FolderName
+@@ -49,7 +59,10 @@
+ 
+ local SelectedLanguage = GG.SelectedLanguage or "en"
+ 
+--- Theme Colors
++-- Assigned in the library section below; the theme functions need it
++local Library
++
++-- Theme Colors (Light and Dark are built in, add your own with GG.Themes or Library.AddTheme)
+ local Theme = {
+     Light = {
+         Background = Color3.fromRGB(245, 247, 250),
+@@ -79,20 +92,56 @@
+     }
+ }
+ 
+-local CurrentTheme = Theme[GG.Theme] or Theme.Dark
++local BUILT_IN_THEMES = { Light = true, Dark = true }
++
++-- Every color a theme can set
++local THEME_KEYS = {
++    Background = true,
++    BackgroundSecondary = true,
++    ModuleBackground = true,
++    TextPrimary = true,
++    TextSecondary = true,
++    Accent = true,
++    AccentHover = true,
++    Stroke = true,
++    Divider = true,
++    ToggleOff = true,
++    Card = true,
++}
++
++-- Builds a full theme from a partial one: missing colors come from `Base` (default "Dark")
++local function buildTheme(definition)
++    local base = Theme[definition.Base] or Theme.Dark
++    local result = {}
++
++    for key, value in pairs(base) do
++        result[key] = value
++    end
++    for key, value in pairs(definition) do
++        if THEME_KEYS[key] and typeof(value) == "Color3" then
++            result[key] = value
++        end
++    end
++    if typeof(definition.Accent) == "Color3" and typeof(definition.AccentHover) ~= "Color3" then
++        result.AccentHover = definition.Accent:Lerp(Color3.new(1, 1, 1), 0.2)
++    end
++
++    return result
++end
+ 
+--- Apply custom colors if user set
+-if GG.TextColor then
+-    CurrentTheme.TextPrimary = GG.TextColor
+-end
+-if GG.TextSecondaryColor then
+-    CurrentTheme.TextSecondary = GG.TextSecondaryColor
+-end
+-if GG.AccentColor then
+-    CurrentTheme.Accent = GG.AccentColor
+-    CurrentTheme.AccentHover = GG.AccentColor:Lerp(Color3.new(1,1,1), 0.2)
++-- Themes given before the library loads: getgenv().GG = { Themes = { Ocean = { Base = "Dark", Accent = ... } } }
++if type(GG.Themes) == "table" then
++    for name, definition in pairs(GG.Themes) do
++        if type(definition) == "table" and not BUILT_IN_THEMES[name] then
++            Theme[name] = buildTheme(definition)
++        end
++    end
+ end
+ 
++-- The active colors (a copy, so switching themes never edits the theme tables)
++local CurrentTheme = {}
++
++-- Copies a theme into `target` and applies the GG color overrides
+ local function applyThemeColors(target, source)
+     for k, v in pairs(source) do
+         target[k] = v
+@@ -101,21 +150,18 @@
+     if GG.TextSecondaryColor then target.TextSecondary = GG.TextSecondaryColor end
+     if GG.AccentColor then
+         target.Accent = GG.AccentColor
+-        target.AccentHover = GG.AccentColor:Lerp(Color3.new(1,1,1), 0.2)
++        target.AccentHover = GG.AccentColor:Lerp(Color3.new(1, 1, 1), 0.2)
+     end
+ end
+ 
+-function Library_SetTheme(name)
+-    name = name or "Dark"
+-    if name ~= "Dark" and name ~= "Light" then
+-        name = "Dark"
+-    end
+-    GG.Theme = name
+-    local src = Theme[name] or Theme.Dark
+-    applyThemeColors(CurrentTheme, src)
++if not Theme[GG.Theme] then
++    GG.Theme = "Dark"
++end
++applyThemeColors(CurrentTheme, Theme[GG.Theme])
+ 
++-- Repaints everything that is already on screen with the colors in CurrentTheme
++local function repaintTheme()
+     -- Color picker popups are parented separately from the main interface.
+-    -- Update them explicitly whenever the active theme changes.
+     for index = #Library._color_popups, 1, -1 do
+         local updatePopupTheme = Library._color_popups[index]
+         if updatePopupTheme then
+@@ -140,25 +186,35 @@
+                 continue
+             end
+ 
+-            if obj.Name == "Module" and obj:IsA("Frame") then
++            local name = obj.Name
++
++            if name == "Module" and obj:IsA("Frame") then
+                 obj.BackgroundColor3 = CurrentTheme.ModuleBackground
+                 local st = obj:FindFirstChildOfClass("UIStroke")
+                 if st then st.Color = CurrentTheme.Stroke end
+-            elseif obj.Name == "Paragraph" or obj.Name == "Text" then
++            elseif name == "Paragraph" or name == "Text" then
+                 obj.BackgroundColor3 = CurrentTheme.Card
+-            elseif obj.Name == "Divider" and obj:IsA("Frame") then
++            elseif name == "ControlDivider" then
++                -- the divider control follows the UI text color
++                obj.BackgroundColor3 = CurrentTheme.TextPrimary
++            elseif name == "Divider" and obj:IsA("Frame") then
+                 obj.BackgroundColor3 = CurrentTheme.Stroke
+-            elseif obj:IsA("UIStroke") then
+-                if obj.Parent and (obj.Parent.Name == "Module" or obj.Parent.Name == "Container" or obj.Parent.Name == "Paragraph") then
+-                    obj.Color = CurrentTheme.Stroke
+-                end
++            elseif obj:IsA("Frame") and (name == "Drag" or name == "Fill" or name == "Box" or name == "Keybind" or name == "KeybindBox" or name == "Pin") then
++                obj.BackgroundColor3 = CurrentTheme.Accent
++            elseif obj:IsA("TextBox") and name == "Textbox" then
++                obj.BackgroundColor3 = CurrentTheme.Accent
++                obj.TextColor3 = CurrentTheme.TextPrimary
+             elseif obj:IsA("TextLabel") or obj:IsA("TextBox") then
+-                local n = obj.Name
+-                if n == "ModuleName" or n == "ClientName" then
++                if name == "ClientName" then
++                    -- with the galactic effect the text stays white and the gradient does the coloring
++                    if not GG.GalacticText then
++                        obj.TextColor3 = CurrentTheme.Accent
++                    end
++                elseif name == "ModuleName" then
+                     obj.TextColor3 = CurrentTheme.Accent
+-                elseif n == "Description" or n == "Value" or n == "CurrentOption" then
++                elseif name == "Description" or name == "Value" or name == "CurrentOption" then
+                     obj.TextColor3 = CurrentTheme.TextSecondary
+-                elseif n ~= "Option" and n ~= "KeybindLabel" then
++                elseif name ~= "Option" and name ~= "KeybindLabel" then
+                     -- general labels
+                     if obj.TextTransparency < 0.5 then
+                         obj.TextColor3 = CurrentTheme.TextPrimary
+@@ -178,6 +234,16 @@
+     for _, hook in ipairs(Library._theme_hooks or {}) do
+         pcall(hook)
+     end
++end
++
++-- Switch to any registered theme: "Dark", "Light" or a custom one
++function Library_SetTheme(name)
++    if not Theme[name] then
++        name = "Dark"
++    end
++    GG.Theme = name
++    applyThemeColors(CurrentTheme, Theme[name])
++    repaintTheme()
+ 
+     if Library.Notify then
+         Library.Notify.Success("Theme", "Switched to " .. name, 2)
+@@ -710,7 +776,7 @@
+ }, Config)
+ 
+ 
+-local Library = {
++Library = {
+     _config = Config:load(game.GameId),
+ 
+     _choosing_keybind = false,
+@@ -732,6 +798,70 @@
+ Library.__index = Library
+ Library.SetTheme = Library_SetTheme
+ 
++-- Plugin support: internals used by PluginSystem
++Library._connections = Connections
++function Library.SaveSilent()
++    Config:save(game.GameId, Library._config)
++end
++
++-- Theme API ---------------------------------------------------------
++-- Library.AddTheme("Ocean", { Base = "Dark", Accent = Color3.fromRGB(0, 170, 255) })
++-- Library.SetTheme("Ocean")
++function Library.AddTheme(name, definition)
++    if type(name) ~= "string" or name == "" then
++        error("theme name must be a non-empty string", 2)
++    end
++    if type(definition) ~= "table" then
++        error("a theme must be a table of colors", 2)
++    end
++    if BUILT_IN_THEMES[name] then
++        error('"' .. name .. '" is a built-in theme, pick another name', 2)
++    end
++    Theme[name] = buildTheme(definition)
++    return name
++end
++
++function Library.GetThemes()
++    local names = {}
++    for name in pairs(Theme) do
++        table.insert(names, name)
++    end
++    table.sort(names)
++    return names
++end
++
++function Library.GetTheme()
++    return GG.Theme
++end
++
++function Library.GetThemeColors()
++    return table.clone(CurrentTheme)
++end
++
++-- Change one color of the active theme and repaint. Text and accent colors also stay after SetTheme.
++-- Keys: Background, BackgroundSecondary, ModuleBackground, TextPrimary, TextSecondary, Accent,
++-- AccentHover, Stroke, Divider, ToggleOff, Card
++function Library.SetThemeColor(key, color)
++    if not THEME_KEYS[key] then
++        error('unknown theme color "' .. tostring(key) .. '"', 2)
++    end
++    if typeof(color) ~= "Color3" then
++        error("the color must be a Color3", 2)
++    end
++
++    CurrentTheme[key] = color
++    if key == "Accent" then
++        CurrentTheme.AccentHover = color:Lerp(Color3.new(1, 1, 1), 0.2)
++        GG.AccentColor = color
++    elseif key == "TextPrimary" then
++        GG.TextColor = color
++    elseif key == "TextSecondary" then
++        GG.TextSecondaryColor = color
++    end
++
++    repaintTheme()
++end
++
+ -- Icon helpers (also usable from your own scripts)
+ Library.ApplyIcon = applyIcon                       -- Library.ApplyIcon(imageLabel, "trash-2", optionalTintColor)
+ Library.GetImage = resolveImageContent              -- turns an asset id / number / URL into an image string
+@@ -843,7 +973,20 @@
+     end
+ end
+ 
+--- Watermark (top-left label with the UI name and FPS)
++-- Watermark: an icon in a screen corner. Options: GG.WatermarkIcon / Size / Position / Offset /
++-- Transparency / Color / Text, or Library.SetWatermarkOptions({ ... }) at any time.
++local WATERMARK_CORNERS = {
++    TopLeft = { anchor = Vector2.new(0, 0), x = 1, y = 1 },
++    TopRight = { anchor = Vector2.new(1, 0), x = -1, y = 1 },
++    BottomLeft = { anchor = Vector2.new(0, 1), x = 1, y = -1 },
++    BottomRight = { anchor = Vector2.new(1, 1), x = -1, y = -1 },
++}
++
++local function getGuiParent()
++    local ok, ui = pcall(function() return gethui and gethui() end)
++    return (ok and ui) or CoreGui
++end
++
+ function Library.DestroyWatermark()
+     if Library._wm_connection then
+         Library._wm_connection:Disconnect()
+@@ -855,68 +998,110 @@
+     end
+ end
+ 
+-function Library.CreateWatermark(text)
++function Library.CreateWatermark()
+     Library.DestroyWatermark()
+ 
+-    local wmGui = Instance.new("ScreenGui")
+-    wmGui.Name = "SxH_Watermark"
+-    wmGui.ResetOnSpawn = false
+-    wmGui.IgnoreGuiInset = true
+-    wmGui.DisplayOrder = 50
+-    wmGui.Parent = CoreGui
+-
+-    local frame = Instance.new("Frame")
+-    frame.Size = UDim2.new(0, 0, 0, 28)
+-    frame.AutomaticSize = Enum.AutomaticSize.X
+-    frame.Position = UDim2.new(0, 12, 0, 12)
+-    frame.BackgroundColor3 = CurrentTheme.Card or CurrentTheme.BackgroundSecondary
+-    frame.BackgroundTransparency = 0.15
+-    frame.BorderSizePixel = 0
+-    frame.Parent = wmGui
++    local size = math.clamp(tonumber(GG.WatermarkSize) or 40, 12, 256)
++    local corner = WATERMARK_CORNERS[GG.WatermarkPosition] or WATERMARK_CORNERS.TopLeft
++    local offset = typeof(GG.WatermarkOffset) == "Vector2" and GG.WatermarkOffset or Vector2.new(12, 12)
++    local tint = typeof(GG.WatermarkColor) == "Color3" and GG.WatermarkColor or nil
++
++    local gui = mk("ScreenGui", {
++        Name = "SxH_Watermark",
++        ResetOnSpawn = false,
++        IgnoreGuiInset = true,
++        DisplayOrder = 50,
++    }, getGuiParent())
++
++    local holder = mk("Frame", {
++        Name = "Holder",
++        AnchorPoint = corner.anchor,
++        Position = UDim2.new(corner.anchor.X, offset.X * corner.x, corner.anchor.Y, offset.Y * corner.y),
++        Size = UDim2.fromOffset(0, size),
++        AutomaticSize = Enum.AutomaticSize.X,
++        BackgroundTransparency = 1,
++    }, gui)
++    mk("UIListLayout", {
++        FillDirection = Enum.FillDirection.Horizontal,
++        VerticalAlignment = Enum.VerticalAlignment.Center,
++        HorizontalAlignment = corner.x == 1 and Enum.HorizontalAlignment.Left or Enum.HorizontalAlignment.Right,
++        Padding = UDim.new(0, 8),
++        SortOrder = Enum.SortOrder.LayoutOrder,
++    }, holder)
++
++    local icon = mk("ImageLabel", {
++        Name = "WatermarkIcon",
++        Size = UDim2.fromOffset(size, size),
++        BackgroundTransparency = 1,
++        ScaleType = Enum.ScaleType.Fit,
++        ImageTransparency = math.clamp(tonumber(GG.WatermarkTransparency) or 0, 0, 1),
++        LayoutOrder = 1,
++    }, holder)
++    if not applyIcon(icon, GG.WatermarkIcon, tint) then
++        icon.Visible = false
++    end
+ 
+-    local corner = Instance.new("UICorner")
+-    corner.CornerRadius = UDim.new(0, 6)
+-    corner.Parent = frame
++    local text = tostring(GG.WatermarkText or "")
++    if text ~= "" then
++        local label = mk("TextLabel", {
++            Name = "WatermarkText",
++            Size = UDim2.fromOffset(0, size),
++            AutomaticSize = Enum.AutomaticSize.X,
++            BackgroundTransparency = 1,
++            Font = Enum.Font.GothamBold,
++            TextSize = 13,
++            TextColor3 = tint or CurrentTheme.TextPrimary,
++            TextStrokeTransparency = 0.6,
++            Text = text,
++            LayoutOrder = 2,
++        }, holder)
+ 
+-    local stroke = Instance.new("UIStroke")
+-    stroke.Color = CurrentTheme.Accent
+-    stroke.Transparency = 0.5
+-    stroke.Parent = frame
++        -- "{fps}" in the text is replaced by the current frame rate
++        if string.find(text, "{fps}", 1, true) then
++            label.Text = (string.gsub(text, "{fps}", "--"))
++            local frames, last = 0, os.clock()
++            Library._wm_connection = RunService.RenderStepped:Connect(function()
++                frames += 1
++                local now = os.clock()
++                if now - last >= 1 then
++                    label.Text = (string.gsub(text, "{fps}", tostring(frames)))
++                    frames, last = 0, now
++                end
++            end)
++        end
++    end
+ 
+-    local pad = Instance.new("UIPadding")
+-    pad.PaddingLeft = UDim.new(0, 10)
+-    pad.PaddingRight = UDim.new(0, 10)
+-    pad.Parent = frame
++    getgenv().SxH_Watermark = gui
++    return gui
++end
+ 
+-    local label = Instance.new("TextLabel")
+-    label.BackgroundTransparency = 1
+-    label.Size = UDim2.new(0, 0, 1, 0)
+-    label.AutomaticSize = Enum.AutomaticSize.X
+-    label.Font = Enum.Font.GothamBold
+-    label.TextSize = 12
+-    label.TextColor3 = CurrentTheme.TextPrimary
+-    label.TextXAlignment = Enum.TextXAlignment.Left
+-    label.Parent = frame
+-
+-    local showText = text or UI_NAME
+-    local fps = 0
+-    local frames = 0
+-    local last = os.clock()
+-
+-    Library._wm_connection = RunService.RenderStepped:Connect(function()
+-        frames += 1
+-        local now = os.clock()
+-        if now - last >= 1 then
+-            fps = frames
+-            frames = 0
+-            last = now
+-            label.Text = string.format("%s  |  %d FPS", showText, fps)
++-- Change watermark options at runtime: { Icon, Size, Position, Offset, Transparency, Color, Text }
++function Library.SetWatermarkOptions(options)
++    local keys = {
++        Icon = "WatermarkIcon",
++        Size = "WatermarkSize",
++        Position = "WatermarkPosition",
++        Offset = "WatermarkOffset",
++        Transparency = "WatermarkTransparency",
++        Color = "WatermarkColor",
++        Text = "WatermarkText",
++    }
++    for key, ggKey in pairs(keys) do
++        if options and options[key] ~= nil then
++            GG[ggKey] = options[key]
+         end
+-    end)
+-    label.Text = showText .. "  |  -- FPS"
++    end
++
++    if Library._watermark_on then
++        Library.CreateWatermark()
++    end
++    if Library._refresh_pill_icon then
++        Library._refresh_pill_icon()
++    end
++end
+ 
+-    getgenv().SxH_Watermark = wmGui
+-    return wmGui
++function Library.SetWatermarkIcon(icon)
++    Library.SetWatermarkOptions({ Icon = icon })
+ end
+ 
+ -- Turn the watermark on / off (also updates the "Show watermark" pill and saves the choice)
+@@ -924,7 +1109,7 @@
+     Library._watermark_on = state and true or false
+ 
+     if Library._watermark_on then
+-        Library.CreateWatermark(UI_NAME)
++        Library.CreateWatermark()
+     else
+         Library.DestroyWatermark()
+     end
+@@ -1693,8 +1878,11 @@
+     ---------------------------------------------------------------
+     -- "Show watermark" pill (bottom-right of the window)
+     ---------------------------------------------------------------
+-    local Pill = mk('Frame', {
++    local Pill = mk('TextButton', {
+         Name = 'WatermarkPill',
++        Text = '',
++        AutoButtonColor = false,
++        ZIndex = 5,
+         AnchorPoint = Vector2.new(1, 1),
+         Position = UDim2.new(1, -12, 1, -8),
+         Size = UDim2.fromOffset(140, 28),
+@@ -1708,16 +1896,19 @@
+         Transparency = 0.3,
+         ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+     }, Pill)
+-    local PillIcon = mk('TextLabel', {
++    local PillIcon = mk('ImageLabel', {
+         Name = 'PillIcon',
+-        Position = UDim2.fromOffset(9, 0),
+-        Size = UDim2.fromOffset(16, 28),
++        Position = UDim2.fromOffset(8, 6),
++        Size = UDim2.fromOffset(16, 16),
+         BackgroundTransparency = 1,
+-        Font = Enum.Font.GothamBold,
+-        TextSize = 12,
+-        TextColor3 = CurrentTheme.TextSecondary,
+-        Text = '\240\159\145\145',
++        ScaleType = Enum.ScaleType.Fit,
+     }, Pill)
++    -- Shows the same image as the watermark (GG.WatermarkIcon)
++    local function refreshPillIcon()
++        PillIcon.Visible = applyIcon(PillIcon, GG.WatermarkIcon, nil)
++    end
++    refreshPillIcon()
++    Library._refresh_pill_icon = refreshPillIcon
+     local PillText = mk('TextLabel', {
+         Name = 'PillText',
+         Position = UDim2.fromOffset(28, 0),
+@@ -1730,10 +1921,8 @@
+         TextXAlignment = Enum.TextXAlignment.Left,
+     }, Pill)
+ 
+-    local PillTrack = mk('TextButton', {
++    local PillTrack = mk('Frame', {
+         Name = 'PillTrack',
+-        Text = '',
+-        AutoButtonColor = false,
+         AnchorPoint = Vector2.new(1, 0.5),
+         Position = UDim2.new(1, -10, 0.5, 0),
+         Size = UDim2.fromOffset(26, 14),
+@@ -1761,7 +1950,8 @@
+     end
+     Library._paint_watermark_pill = paintPill
+ 
+-    PillTrack.MouseButton1Click:Connect(function()
++    -- The whole pill is the button
++    Pill.MouseButton1Click:Connect(function()
+         Library.SetWatermark(not Library._watermark_on)
+     end)
+ 
+@@ -1780,7 +1970,6 @@
+         HintLabel.TextColor3 = CurrentTheme.TextSecondary
+         Pill.BackgroundColor3 = CurrentTheme.ModuleBackground
+         PillStroke.Color = CurrentTheme.Stroke
+-        PillIcon.TextColor3 = CurrentTheme.TextSecondary
+         PillText.TextColor3 = CurrentTheme.TextPrimary
+         paintPill(Library._watermark_on)
+     end)
+@@ -2168,7 +2357,7 @@
+     local ProgressHolder = mk('Frame', {
+         Name = 'ProgressHolder',
+         AnchorPoint = Vector2.new(1, 0),
+-        Position = UDim2.new(1, -12, 0, 10),
++        Position = UDim2.new(1, -12, 0, 42),
+         Size = UDim2.new(0, 214, 0, 0),
+         AutomaticSize = Enum.AutomaticSize.Y,
+         BackgroundTransparency = 1,
+@@ -2427,6 +2616,493 @@
+         return createProgressBar(settings)
+     end
+ 
++    ---------------------------------------------------------------
++    -- Search: circle button in the top-right corner of the window (Ctrl+F)
++    -- Finds modules and their controls by name, then jumps to them.
++    -- GG.Search = false hides it, GG.SearchKey changes the key used with Ctrl.
++    ---------------------------------------------------------------
++    local SEARCH_MAX_RESULTS = 30
++    local SEARCH_ROW_HEIGHT = 38
++
++    -- Shown on the right of a result, taken from the control's instance name
++    local CONTROL_KINDS = {
++        Checkbox = "Toggle",
++        Slider = "Slider",
++        RangeSlider = "Range",
++        Dropdown = "Dropdown",
++        Button = "Button",
++        ColorPickerRow = "Color",
++        Paragraph = "Text",
++        Text = "Text",
++        TextLabel = "Input",
++        OuterFrame = "Divider",
++    }
++
++    local SearchButton = mk('TextButton', {
++        Name = 'SearchButton',
++        Text = '',
++        AutoButtonColor = false,
++        AnchorPoint = Vector2.new(1, 0),
++        Position = UDim2.new(1, -12, 0, 4),
++        Size = UDim2.fromOffset(28, 28),
++        BackgroundColor3 = CurrentTheme.Card,
++        BorderSizePixel = 0,
++        Visible = GG.Search ~= false,
++        ZIndex = 45,
++    }, Handler)
++    mk('UICorner', { CornerRadius = UDim.new(1, 0) }, SearchButton)
++    local SearchButtonStroke = mk('UIStroke', {
++        Color = CurrentTheme.Stroke,
++        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
++    }, SearchButton)
++
++    local SearchIcon = mk('ImageLabel', {
++        Name = 'SearchIcon',
++        AnchorPoint = Vector2.new(0.5, 0.5),
++        Position = UDim2.fromScale(0.5, 0.5),
++        Size = UDim2.fromOffset(14, 14),
++        BackgroundTransparency = 1,
++        ScaleType = Enum.ScaleType.Fit,
++        ZIndex = 46,
++    }, SearchButton)
++    if not applyIcon(SearchIcon, 'search') then
++        -- The Lucide library could not be loaded: show an emoji instead
++        SearchIcon.Visible = false
++        mk('TextLabel', {
++            Name = 'SearchFallback',
++            Size = UDim2.fromScale(1, 1),
++            BackgroundTransparency = 1,
++            Text = '\240\159\148\141',
++            TextSize = 13,
++            ZIndex = 46,
++        }, SearchButton)
++    end
++
++    local SearchPanel = mk('Frame', {
++        Name = 'SearchPanel',
++        Visible = false,
++        Active = true, -- also stops the window drag while using the panel
++        AnchorPoint = Vector2.new(1, 0),
++        Position = UDim2.new(1, -12, 0, 38),
++        Size = UDim2.fromOffset(280, 58),
++        BackgroundColor3 = CurrentTheme.ModuleBackground,
++        BackgroundTransparency = 0.02,
++        BorderSizePixel = 0,
++        ZIndex = 40,
++    }, Handler)
++    mk('UICorner', { CornerRadius = UDim.new(0, 12) }, SearchPanel)
++    local SearchPanelStroke = mk('UIStroke', {
++        Color = CurrentTheme.Stroke,
++        Thickness = 1.2,
++        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
++    }, SearchPanel)
++
++    local SearchBox = mk('TextBox', {
++        Name = 'SearchBox',
++        Position = UDim2.fromOffset(10, 10),
++        Size = UDim2.new(1, -20, 0, 30),
++        BackgroundColor3 = CurrentTheme.Card,
++        BorderSizePixel = 0,
++        ClearTextOnFocus = false,
++        Font = Enum.Font.Gotham,
++        TextSize = 12,
++        TextColor3 = CurrentTheme.TextPrimary,
++        PlaceholderText = 'Search modules and functions...',
++        PlaceholderColor3 = CurrentTheme.TextSecondary,
++        Text = '',
++        TextXAlignment = Enum.TextXAlignment.Left,
++    }, SearchPanel)
++    mk('UICorner', { CornerRadius = UDim.new(0, 8) }, SearchBox)
++    mk('UIPadding', { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10) }, SearchBox)
++
++    local SearchResults = mk('ScrollingFrame', {
++        Name = 'SearchResults',
++        Position = UDim2.fromOffset(10, 48),
++        Size = UDim2.new(1, -20, 0, 0),
++        BackgroundTransparency = 1,
++        BorderSizePixel = 0,
++        ScrollBarThickness = 2,
++        ScrollBarImageColor3 = CurrentTheme.Accent,
++        CanvasSize = UDim2.new(0, 0, 0, 0),
++        AutomaticCanvasSize = Enum.AutomaticSize.Y,
++    }, SearchPanel)
++    mk('UIListLayout', { Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder }, SearchResults)
++
++    local searchOpen = false
++
++    local function paintSearchButton(active)
++        SearchButton.BackgroundColor3 = active and CurrentTheme.Accent or CurrentTheme.Card
++        SearchIcon.ImageColor3 = active and contrastText(CurrentTheme.Accent) or CurrentTheme.TextSecondary
++    end
++    paintSearchButton(false)
++
++    local function isInside(guiObject, position)
++        local topLeft, size = guiObject.AbsolutePosition, guiObject.AbsoluteSize
++        return position.X >= topLeft.X and position.X <= topLeft.X + size.X
++            and position.Y >= topLeft.Y and position.Y <= topLeft.Y + size.Y
++    end
++
++    local function closeSearch()
++        if not searchOpen then
++            return
++        end
++        searchOpen = false
++        SearchPanel.Visible = false
++        SearchBox:ReleaseFocus()
++        paintSearchButton(false)
++        Connections:disconnect('search_outside')
++    end
++
++    -- First text found inside a control (its title), looking at children in creation order
++    local function findTitle(instance)
++        if (instance:IsA('TextLabel') or instance:IsA('TextButton')) and instance.Text ~= '' then
++            return (string.gsub(instance.Text, '^%s+', ''))
++        end
++        for _, child in ipairs(instance:GetChildren()) do
++            local title = findTitle(child)
++            if title then
++                return title
++            end
++        end
++        return nil
++    end
++
++    -- Every module and control of every tab, in the order they appear in the UI
++    local function buildSearchIndex()
++        local entries = {}
++
++        for _, tabManager in ipairs(self._tabs or {}) do
++            local tabTitle = findTitle(tabManager.Frame) or 'Tab'
++
++            for _, moduleManager in ipairs(tabManager.Modules or {}) do
++                local frame = moduleManager.Frame
++                local header = frame and frame:FindFirstChild('Header')
++                local nameLabel = header and header:FindFirstChild('ModuleName')
++                local descriptionLabel = header and header:FindFirstChild('Description')
++                local moduleTitle = nameLabel and nameLabel.Text or ''
++
++                if moduleTitle ~= '' then
++                    table.insert(entries, {
++                        Kind = 'Module',
++                        Title = moduleTitle,
++                        Context = tabTitle,
++                        Detail = descriptionLabel and descriptionLabel.Text or '',
++                        Tab = tabManager,
++                        Module = moduleManager,
++                        Target = frame,
++                    })
++
++                    local options = frame:FindFirstChild('Options')
++                    for _, control in ipairs(options and options:GetChildren() or {}) do
++                        local title = control:IsA('GuiObject') and findTitle(control) or nil
++                        if title and title ~= '' then
++                            table.insert(entries, {
++                                Kind = CONTROL_KINDS[control.Name] or 'Control',
++                                Title = title,
++                                Context = tabTitle .. '  >  ' .. moduleTitle,
++                                Detail = '',
++                                Tab = tabManager,
++                                Module = moduleManager,
++                                Target = control,
++                            })
++                        end
++                    end
++                end
++            end
++        end
++
++        return entries
++    end
++
++    -- All words of the query must appear in the title, tab, module or description
++    local function searchEntries(query)
++        local terms = {}
++        for term in string.gmatch(string.lower(query), '%S+') do
++            table.insert(terms, term)
++        end
++
++        local scored = {}
++        for order, entry in ipairs(buildSearchIndex()) do
++            local title = string.lower(entry.Title)
++            local haystack = title .. ' ' .. string.lower(entry.Context) .. ' ' .. string.lower(entry.Detail)
++
++            local matches = (#terms > 0) or entry.Kind == 'Module' -- empty query lists the modules only
++            for _, term in ipairs(terms) do
++                if not string.find(haystack, term, 1, true) then
++                    matches = false
++                    break
++                end
++            end
++
++            if matches then
++                local score = 0
++                local first = terms[1]
++                if first then
++                    if title == first then
++                        score = 3
++                    elseif string.sub(title, 1, #first) == first then
++                        score = 2
++                    elseif string.find(title, first, 1, true) then
++                        score = 1
++                    end
++                end
++                if entry.Kind == 'Module' then
++                    score += 0.5
++                end
++                table.insert(scored, { entry = entry, score = score, order = order })
++            end
++        end
++
++        table.sort(scored, function(left, right)
++            if left.score ~= right.score then
++                return left.score > right.score
++            end
++            return left.order < right.order
++        end)
++
++        local results = {}
++        for index = 1, math.min(#scored, SEARCH_MAX_RESULTS) do
++            results[index] = scored[index].entry
++        end
++        return results
++    end
++
++    -- Brief accent outline that fades out
++    local function highlightTarget(target)
++        local outline = mk('UIStroke', {
++            Color = CurrentTheme.Accent,
++            Thickness = 2,
++            ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
++        }, target)
++        local fade = TweenService:Create(outline, TweenInfo.new(1.8, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
++            Transparency = 1,
++        })
++        fade:Play()
++        fade.Completed:Once(function()
++            outline:Destroy()
++        end)
++    end
++
++    local function scrollToTarget(tabManager, target)
++        local section = target:IsDescendantOf(tabManager.LeftSection) and tabManager.LeftSection or tabManager.RightSection
++        local scale = math.max(UIScale.Scale, 0.01)
++        local offset = (target.AbsolutePosition.Y - section.AbsolutePosition.Y) / scale + section.CanvasPosition.Y - 8
++        section.CanvasPosition = Vector2.new(0, math.max(0, offset))
++    end
++
++    local function goToEntry(entry)
++        local tabManager = entry.Tab
++        if tabManager._destroyed or not entry.Target.Parent then
++            return
++        end
++
++        closeSearch()
++        tabManager:Select()
++
++        task.spawn(function()
++            task.wait(0.05) -- let the layout settle after the tab became visible
++            if not entry.Target.Parent then
++                return
++            end
++
++            scrollToTarget(tabManager, entry.Target)
++            highlightTarget(entry.Target)
++
++            -- Controls are clipped while their module is off. We never switch it for the user,
++            -- because the module toggle also runs the module's callback.
++            if entry.Kind ~= 'Module' and not entry.Module._state then
++                Library.Notify.Info('Search', string.format('"%s" is inside "%s". Turn that module on to show it.', entry.Title, entry.Context), 4)
++            end
++        end)
++    end
++
++    local function renderResults()
++        for _, child in ipairs(SearchResults:GetChildren()) do
++            if child:IsA('GuiObject') then
++                child:Destroy()
++            end
++        end
++
++        local results = searchEntries(SearchBox.Text)
++        local listHeight
++
++        if #results == 0 then
++            mk('TextLabel', {
++                Name = 'Description', -- recolored with the secondary text color on theme changes
++                Size = UDim2.new(1, 0, 0, 26),
++                BackgroundTransparency = 1,
++                Font = Enum.Font.Gotham,
++                TextSize = 11,
++                TextColor3 = CurrentTheme.TextSecondary,
++                Text = 'No matches',
++            }, SearchResults)
++            listHeight = 26
++        else
++            for index, entry in ipairs(results) do
++                local Row = mk('TextButton', {
++                    Name = 'SearchResult',
++                    Text = '',
++                    AutoButtonColor = false,
++                    Size = UDim2.new(1, -6, 0, SEARCH_ROW_HEIGHT),
++                    BackgroundColor3 = CurrentTheme.Card,
++                    BackgroundTransparency = 0.4,
++                    BorderSizePixel = 0,
++                    LayoutOrder = index,
++                }, SearchResults)
++                mk('UICorner', { CornerRadius = UDim.new(0, 8) }, Row)
++
++                mk('TextLabel', {
++                    Name = 'ResultTitle',
++                    Position = UDim2.fromOffset(10, 4),
++                    Size = UDim2.new(1, -84, 0, 16),
++                    BackgroundTransparency = 1,
++                    Font = Enum.Font.GothamMedium,
++                    TextSize = 12,
++                    TextColor3 = CurrentTheme.TextPrimary,
++                    TextXAlignment = Enum.TextXAlignment.Left,
++                    TextTruncate = Enum.TextTruncate.AtEnd,
++                    Text = entry.Title,
++                }, Row)
++                mk('TextLabel', {
++                    Name = 'Description',
++                    Position = UDim2.fromOffset(10, 21),
++                    Size = UDim2.new(1, -20, 0, 13),
++                    BackgroundTransparency = 1,
++                    Font = Enum.Font.Gotham,
++                    TextSize = 10,
++                    TextColor3 = CurrentTheme.TextSecondary,
++                    TextXAlignment = Enum.TextXAlignment.Left,
++                    TextTruncate = Enum.TextTruncate.AtEnd,
++                    Text = entry.Context,
++                }, Row)
++                mk('TextLabel', {
++                    Name = 'Value',
++                    AnchorPoint = Vector2.new(1, 0),
++                    Position = UDim2.new(1, -8, 0, 5),
++                    Size = UDim2.fromOffset(62, 14),
++                    BackgroundTransparency = 1,
++                    Font = Enum.Font.GothamMedium,
++                    TextSize = 9,
++                    TextColor3 = CurrentTheme.TextSecondary,
++                    TextXAlignment = Enum.TextXAlignment.Right,
++                    Text = entry.Kind,
++                }, Row)
++
++                Row.MouseEnter:Connect(function()
++                    TweenService:Create(Row, TweenInfo.new(0.12), { BackgroundTransparency = 0.05 }):Play()
++                end)
++                Row.MouseLeave:Connect(function()
++                    TweenService:Create(Row, TweenInfo.new(0.12), { BackgroundTransparency = 0.4 }):Play()
++                end)
++                Row.MouseButton1Click:Connect(function()
++                    goToEntry(entry)
++                end)
++            end
++            listHeight = #results * (SEARCH_ROW_HEIGHT + 4)
++        end
++
++        local visibleHeight = math.min(listHeight, 250)
++        SearchResults.Size = UDim2.new(1, -20, 0, visibleHeight)
++        SearchResults.CanvasPosition = Vector2.new(0, 0)
++        SearchPanel.Size = UDim2.fromOffset(280, 58 + visibleHeight + 8)
++    end
++
++    local function openSearch(query)
++        if searchOpen then
++            if query then
++                SearchBox.Text = query
++            end
++            return
++        end
++
++        searchOpen = true
++        SearchBox.Text = query or ''
++        renderResults()
++        SearchPanel.Visible = true
++        paintSearchButton(true)
++
++        -- Click or tap outside the panel closes it
++        Connections['search_outside'] = UserInputService.InputBegan:Connect(function(input)
++            if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
++                return
++            end
++            if not isInside(SearchPanel, input.Position) and not isInside(SearchButton, input.Position) then
++                closeSearch()
++            end
++        end)
++
++        task.defer(function()
++            if searchOpen then
++                SearchBox:CaptureFocus()
++            end
++        end)
++    end
++
++    SearchBox:GetPropertyChangedSignal('Text'):Connect(function()
++        if searchOpen then
++            renderResults()
++        end
++    end)
++
++    -- Enter jumps to the first result
++    SearchBox.FocusLost:Connect(function(enterPressed)
++        if enterPressed and searchOpen then
++            local first = searchEntries(SearchBox.Text)[1]
++            if first then
++                goToEntry(first)
++            end
++        end
++    end)
++
++    SearchButton.MouseButton1Click:Connect(function()
++        if searchOpen then
++            closeSearch()
++        else
++            openSearch()
++        end
++    end)
++
++    Connections['search_keys'] = UserInputService.InputBegan:Connect(function(input, processed)
++        if input.KeyCode == Enum.KeyCode.Escape and searchOpen then
++            closeSearch()
++            return
++        end
++
++        if processed or GG.Search == false or not self._ui_open or not MainGui.Enabled then
++            return
++        end
++
++        local searchKey = GG.SearchKey or Enum.KeyCode.F
++        local controlDown = UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) or UserInputService:IsKeyDown(Enum.KeyCode.RightControl)
++        if input.KeyCode == searchKey and controlDown then
++            openSearch()
++        end
++    end)
++
++    table.insert(Library._theme_hooks, function()
++        SearchButtonStroke.Color = CurrentTheme.Stroke
++        SearchPanelStroke.Color = CurrentTheme.Stroke
++        SearchPanel.BackgroundColor3 = CurrentTheme.ModuleBackground
++        SearchBox.BackgroundColor3 = CurrentTheme.Card
++        SearchBox.TextColor3 = CurrentTheme.TextPrimary
++        SearchBox.PlaceholderColor3 = CurrentTheme.TextSecondary
++        SearchResults.ScrollBarImageColor3 = CurrentTheme.Accent
++        paintSearchButton(searchOpen)
++    end)
++
++    -- Library.OpenSearch("speed") / Window:Search("speed")
++    function Library.OpenSearch(query)
++        openSearch(query)
++    end
++
++    function Library.CloseSearch()
++        closeSearch()
++    end
++
++    function self:Search(query)
++        openSearch(query)
++    end
++
+     function self:Update1Run(a)
+         if a == "nil" then
+             Container.BackgroundTransparency = 0.05
+@@ -2581,8 +3257,39 @@
+         end
+     end
+ 
++    -- After a tab is destroyed: keep LayoutOrder contiguous, move the pin and select a fallback tab
++    function self:renumber_tabs(selectFallback)
++        local tabs = self._tabs or {}
++
++        for index, tabManager in ipairs(tabs) do
++            tabManager.Frame.LayoutOrder = index - 1
++        end
++        self._tab = #tabs
++
++        local selected = nil
++        for _, tabManager in ipairs(tabs) do
++            if tabManager.LeftSection.Visible or tabManager.RightSection.Visible then
++                selected = tabManager
++            end
++        end
++
++        if not selected and selectFallback and tabs[1] then
++            selected = tabs[1]
++            self:update_tabs(selected.Frame)
++            self:update_sections(selected.LeftSection, selected.RightSection)
++        end
++
++        if selected then
++            TweenService:Create(Pin, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
++                Position = UDim2.fromScale(0.026, 0.135 + selected.Frame.LayoutOrder * (0.113 / 1.3))
++            }):Play()
++        end
++    end
++
+     function self:create_tab(title: string, icon: string)
+         local TabManager = {}
++        local window = self
++        self._tabs = self._tabs or {}
+ 
+         local LayoutOrder = 0;
+ 
+@@ -2718,6 +3425,48 @@
+             self:update_sections(LeftSection, RightSection)
+         end)
+ 
++        -- Handles for plugin support: the tab button, both columns and the modules created in this tab
++        TabManager.Frame = Tab
++        TabManager.LeftSection = LeftSection
++        TabManager.RightSection = RightSection
++        TabManager.Modules = {}
++        table.insert(self._tabs, TabManager)
++
++        -- Show this tab (same as clicking its button)
++        function TabManager:Select()
++            window:update_tabs(Tab)
++            window:update_sections(LeftSection, RightSection)
++        end
++
++        -- Remove the tab, its columns and every module inside it
++        function TabManager:Destroy()
++            if TabManager._destroyed then
++                return
++            end
++            TabManager._destroyed = true
++
++            local wasSelected = LeftSection.Visible or RightSection.Visible
++
++            for index = #TabManager.Modules, 1, -1 do
++                local moduleManager = TabManager.Modules[index]
++                if moduleManager then
++                    pcall(function() moduleManager:Destroy() end)
++                end
++            end
++            table.clear(TabManager.Modules)
++
++            local position = table.find(window._tabs, TabManager)
++            if position then
++                table.remove(window._tabs, position)
++            end
++
++            Tab:Destroy()
++            LeftSection:Destroy()
++            RightSection:Destroy()
++
++            window:renumber_tabs(wasSelected)
++        end
++
+         -- Tab:ProgressBar({ Title, Desc, Value = { Min, Max, Default } ... }) shows in the top-right corner of the window
+         function TabManager:ProgressBar(settings)
+             return createProgressBar(settings)
+@@ -2726,13 +3475,29 @@
+         function TabManager:create_module(settings: any)
+ 
+             local LayoutOrderModule = 0;
++            local ParentTab = self
+ 
+             local ModuleManager = {
+                 _state = false,
+                 _size = 0,
+-                _multiplier = 0
++                _multiplier = 0,
++                _keys = {},         -- keys of Connections owned by this module
++                _connections = {},  -- other connections owned by this module
+             }
+ 
++            -- Remember a key of the shared Connections table so Destroy can disconnect it
++            local function trackKey(key)
++                table.insert(ModuleManager._keys, key)
++                return key
++            end
++
++            -- Connect to a global signal and disconnect it when the module is destroyed
++            local function trackedConnect(signal, handler)
++                local connection = signal:Connect(handler)
++                table.insert(ModuleManager._connections, connection)
++                return connection
++            end
++
+             if settings.section == 'right' then
+                 settings.section = RightSection
+             else
+@@ -2756,6 +3521,57 @@
+                 title = string.lower(settings.title or "")
+             })
+ 
++            -- Handles for plugin support
++            ModuleManager.Frame = Module
++            if ParentTab.Modules then
++                table.insert(ParentTab.Modules, ModuleManager)
++            end
++
++            -- Remove the module and every connection it owns
++            function ModuleManager:Destroy()
++                if ModuleManager._destroyed then
++                    return
++                end
++                ModuleManager._destroyed = true
++
++                if Library._close_picker then
++                    pcall(Library._close_picker)
++                end
++
++                for _, connection in ipairs(ModuleManager._connections) do
++                    pcall(function() connection:Disconnect() end)
++                end
++                table.clear(ModuleManager._connections)
++
++                for _, key in ipairs(ModuleManager._keys) do
++                    Connections:disconnect(key)
++                end
++                table.clear(ModuleManager._keys)
++
++                Connections:disconnect(settings.flag .. '_keybind')
++                Connections:disconnect(settings.flag .. '_input_began')
++                if Library._choosing_keybind then
++                    Connections:disconnect('keybind_choose_start')
++                    Library._choosing_keybind = false
++                end
++
++                for index, data in ipairs(Library._all_modules) do
++                    if data.frame == Module then
++                        table.remove(Library._all_modules, index)
++                        break
++                    end
++                end
++
++                if ParentTab.Modules then
++                    local position = table.find(ParentTab.Modules, ModuleManager)
++                    if position then
++                        table.remove(ParentTab.Modules, position)
++                    end
++                end
++
++                Module:Destroy()
++            end
++
+             local UIListLayout = Instance.new('UIListLayout')
+             UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+             UIListLayout.Parent = Module
+@@ -3582,6 +4398,7 @@
+                     end
+                 end)
+                 Connections[settings.flag .. "_keypress"] = keyPressConnection
++                trackKey(settings.flag .. "_keypress")
+             
+                 return CheckboxManager
+             end
+@@ -3635,9 +4452,9 @@
+                     -- Create the inner divider frame that will be placed in the middle of the OuterFrame
+                     local Divider = Instance.new('Frame')
+                     Divider.Size = UDim2.new(1, 0, 0, dividerHeight)
+-                    Divider.BackgroundColor3 = Color3.fromRGB(255, 255, 255) -- White color
++                    Divider.BackgroundColor3 = CurrentTheme.TextPrimary -- same color as the UI text
+                     Divider.BorderSizePixel = 0
+-                    Divider.Name = 'Divider'
++                    Divider.Name = 'ControlDivider'
+                     Divider.Parent = OuterFrame
+                     Divider.ZIndex = 2;
+                     Divider.Position = UDim2.new(0, 0, 0.5, -dividerHeight / 2) -- Center the divider vertically in the OuterFrame
+@@ -3646,9 +4463,9 @@
+                     local Gradient = Instance.new('UIGradient')
+                     Gradient.Parent = Divider
+                     Gradient.Color = ColorSequence.new({
+-                        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),  -- Start with white
++                        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),  -- white keeps the divider's own color
+                         ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 255, 255)), -- Keep it white in the middle
+-                        ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 255, 255, 0))  -- Fade to transparent on the right side
++                        ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 255, 255))  -- the fade comes from Transparency below
+                     })
+                     Gradient.Transparency = NumberSequence.new({
+                         NumberSequenceKeypoint.new(0, 1),   
+@@ -3672,6 +4489,8 @@
+                 LayoutOrderModule = LayoutOrderModule + 1
+ 
+                 local SliderManager = {}
++                trackKey('slider_drag_' .. settings.flag)
++                trackKey('slider_input_' .. settings.flag)
+ 
+                 if self._size == 0 then
+                     self._size = 11
+@@ -4032,7 +4851,7 @@
+                     end
+                 end)
+ 
+-                UserInputService.InputChanged:Connect(function(input)
++                trackedConnect(UserInputService.InputChanged, function(input)
+                     if not active_thumb then return end
+                     if input.UserInputType ~= Enum.UserInputType.MouseMovement and input.UserInputType ~= Enum.UserInputType.Touch then return end
+ 
+@@ -4048,7 +4867,7 @@
+                     RangeSliderManager:update_positions(false)
+                 end)
+ 
+-                UserInputService.InputEnded:Connect(function(input)
++                trackedConnect(UserInputService.InputEnded, function(input)
+                     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                         if active_thumb then
+                             RangeSliderManager:update_positions(true)
+@@ -4641,6 +5460,8 @@
+                     end
+                 end)
+                 Connections["keybind_press_" .. settings.flag] = keyPressConnection
++                trackKey("keybind_press_" .. settings.flag)
++                trackKey("keybind_input_" .. settings.flag)
+             
+                 FeatureButton.MouseButton1Click:Connect(function()
+                     if settings.button_callback then
+@@ -4999,19 +5820,34 @@
+                     }, Popup)
+                     mk("UICorner", { CornerRadius = UDim.new(0, 6) }, Cancel)
+ 
++                    -- The gradient lives on its own frame: a UIGradient on the button itself would also
++                    -- tint the text (white text x accent gradient = invisible text)
+                     local Confirm = mk("TextButton", {
+-                        Text = "Confirm",
+-                        Font = Enum.Font.GothamBold,
+-                        TextSize = 12,
+-                        TextColor3 = contrastText(T.Accent),
++                        Name = "Confirm",
++                        Text = "",
+                         AutoButtonColor = false,
+-                        BackgroundColor3 = Color3.new(1, 1, 1),
++                        BackgroundTransparency = 1,
+                         Position = UDim2.fromOffset(196, 251),
+                         Size = UDim2.fromOffset(86, 26),
+                         BorderSizePixel = 0,
+                     }, Popup)
+-                    mk("UICorner", { CornerRadius = UDim.new(0, 6) }, Confirm)
+-                    mk("UIGradient", { Color = ColorSequence.new(T.Accent, accentB) }, Confirm)
++                    local ConfirmFill = mk("Frame", {
++                        Name = "ConfirmFill",
++                        Size = UDim2.fromScale(1, 1),
++                        BackgroundColor3 = Color3.new(1, 1, 1),
++                        BorderSizePixel = 0,
++                    }, Confirm)
++                    mk("UICorner", { CornerRadius = UDim.new(0, 6) }, ConfirmFill)
++                    mk("UIGradient", { Color = ColorSequence.new(T.Accent, accentB) }, ConfirmFill)
++                    mk("TextLabel", {
++                        Name = "ConfirmText",
++                        Size = UDim2.fromScale(1, 1),
++                        BackgroundTransparency = 1,
++                        Font = Enum.Font.GothamBold,
++                        TextSize = 12,
++                        TextColor3 = contrastText(T.Accent:Lerp(accentB, 0.5)),
++                        Text = "Confirm",
++                    }, Confirm)
+ 
+                     ---------------------------------------------------
+                     -- Logic
+@@ -5217,7 +6053,7 @@
+                 })
+ 
+                 -- refresh khi có người vào/ra
+-                Players.PlayerAdded:Connect(function()
++                trackedConnect(Players.PlayerAdded, function()
+                     -- dropdown không rebuild dễ, chỉ notify
+                 end)
+ 
+@@ -5259,7 +6095,7 @@
+                 guiObject.MouseLeave:Connect(function()
+                     tip.Visible = false
+                 end)
+-                RunService.RenderStepped:Connect(function()
++                trackedConnect(RunService.RenderStepped, function()
+                     if tip.Visible then
+                         tip.Position = UDim2.fromOffset(mouse.X + 14, mouse.Y + 12)
+                     end
