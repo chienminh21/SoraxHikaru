@@ -8,9 +8,9 @@ getgenv().GG = {
     Watermark = false,                -- icon in a screen corner (also toggled by the "Show watermark" pill)
     WatermarkIcon = "rbxassetid://76051962811019", -- asset id / image URL / Lucide name
     WatermarkSize = 40,              -- icon size in pixels
-    WatermarkPosition = "TopLeft",   -- TopLeft | TopRight | BottomLeft | BottomRight
-    WatermarkTransparency = 0,       -- 0 = solid, 1 = invisible
-    WatermarkText = "",              -- optional text next to the icon, "{fps}" shows the FPS
+    WatermarkPosition = "BottomLeft",   -- TopLeft | TopRight | BottomLeft | BottomRight
+    WatermarkTransparency = 0.5,       -- 0 = solid, 1 = invisible
+    WatermarkText = "{fps}",              -- optional text next to the icon, "{fps}" shows the FPS
     ImageBackground = "",            -- "rbxassetid://..." / image URL / "" (none)
     ImageBackgroundStyle = "Crop",   -- Stretch | Fit | Crop | Tile | FadeLeft | FadeRight | FadeTop | FadeBottom
     ImageBackgroundTransparency = 0.7,
