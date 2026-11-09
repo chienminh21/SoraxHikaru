@@ -173,7 +173,7 @@ Example test
 
 The following example demonstrates the basic setup.
 ```lua
-loadstring(game:HttpGet(”https://raw.githubusercontent.com/chienminh21/SoraxHikaru/refs/heads/main/Lib/Example.lua”))()
+loadstring(game:HttpGet("https://raw.githubusercontent.com/chienminh21/SoraxHikaru/refs/heads/main/Lib/Example.lua"))()
 ```
 ⸻
 
@@ -186,13 +186,30 @@ All options are optional in the supplied example.
 getgenv().GG = {
     UIName = "Sora x Hikaru",
     Version = "v2.0",
-    Theme = "Dark",
-    Transparency = 0.15,
-    ToggleKey = Enum.KeyCode.Insert,
-    NotifyMode = "new",
-    Watermark = true,
-    ImageBackground = "",
-    ImageBackgroundStyle = "Crop",
+    Theme = "Dark",                  -- "Dark", "Light" or the name of a custom theme
+    Themes = {                       -- custom themes: missing colors come from Base ("Dark" by default)
+        Ocean = {
+            Base = "Dark",
+            Background = Color3.fromRGB(8, 16, 28),
+            ModuleBackground = Color3.fromRGB(14, 28, 46),
+            Card = Color3.fromRGB(22, 42, 66),
+            Accent = Color3.fromRGB(0, 170, 255),
+            TextSecondary = Color3.fromRGB(140, 200, 255),
+            Stroke = Color3.fromRGB(34, 64, 96),
+        },
+    },
+    TextColor = nil,                 -- optional: Color3 for all main UI text (dividers follow it)
+    Transparency = 0.15,             -- window transparency (0 = solid)
+    ToggleKey = Enum.KeyCode.Insert, -- key that shows / hides the window
+    NotifyMode = "new",              -- notification style: "new" or "old"
+    Watermark = true,                -- icon in a screen corner (also toggled by the "Show watermark" pill)
+    WatermarkIcon = "rbxassetid://76051962811019", -- asset id / image URL / Lucide name
+    WatermarkSize = 40,              -- icon size in pixels
+    WatermarkPosition = "TopLeft",   -- TopLeft | TopRight | BottomLeft | BottomRight
+    WatermarkTransparency = 0,       -- 0 = solid, 1 = invisible
+    WatermarkText = "",              -- optional text next to the icon, "{fps}" shows the FPS
+    ImageBackground = "",            -- "rbxassetid://..." / image URL / "" (none)
+    ImageBackgroundStyle = "Crop",   -- Stretch | Fit | Crop | Tile | FadeLeft | FadeRight | FadeTop | FadeBottom
     ImageBackgroundTransparency = 0.7,
 }
 ```
