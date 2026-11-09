@@ -1,16 +1,31 @@
+
+
+
 getgenv().GG = {
     UIName = "Sora x Hikaru",
     Version = "v2.0",
-    Theme = "Light",                  -- "Dark" or "Light"
+    Theme = "Dark",                  -- "Dark", "Light" or the name of a custom theme
+    Themes = {                       -- custom themes: missing colors come from Base ("Dark" by default)
+        Ocean = {
+            Base = "Dark",
+            Background = Color3.fromRGB(8, 16, 28),
+            ModuleBackground = Color3.fromRGB(14, 28, 46),
+            Card = Color3.fromRGB(22, 42, 66),
+            Accent = Color3.fromRGB(0, 170, 255),
+            TextSecondary = Color3.fromRGB(140, 200, 255),
+            Stroke = Color3.fromRGB(34, 64, 96),
+        },
+    },
+    TextColor = nil,                 -- optional: Color3 for all main UI text (dividers follow it)
     Transparency = 0.15,             -- window transparency (0 = solid)
     ToggleKey = Enum.KeyCode.Insert, -- key that shows / hides the window
-    NotifyMode = "old",              -- notification style: "new" or "old"
-    Watermark = false,                -- icon in a screen corner (also toggled by the "Show watermark" pill)
+    NotifyMode = "new",              -- notification style: "new" or "old"
+    Watermark = true,                -- icon in a screen corner (also toggled by the "Show watermark" pill)
     WatermarkIcon = "rbxassetid://76051962811019", -- asset id / image URL / Lucide name
     WatermarkSize = 40,              -- icon size in pixels
-    WatermarkPosition = "BottomLeft",   -- TopLeft | TopRight | BottomLeft | BottomRight
-    WatermarkTransparency = 0.5,       -- 0 = solid, 1 = invisible
-    WatermarkText = "{fps}",              -- optional text next to the icon, "{fps}" shows the FPS
+    WatermarkPosition = "TopLeft",   -- TopLeft | TopRight | BottomLeft | BottomRight
+    WatermarkTransparency = 0,       -- 0 = solid, 1 = invisible
+    WatermarkText = "",              -- optional text next to the icon, "{fps}" shows the FPS
     ImageBackground = "",            -- "rbxassetid://..." / image URL / "" (none)
     ImageBackgroundStyle = "Crop",   -- Stretch | Fit | Crop | Tile | FadeLeft | FadeRight | FadeTop | FadeBottom
     ImageBackgroundTransparency = 0.7,
@@ -182,7 +197,6 @@ Demo:create_button({
     end,
 })
 
-
 local Esp = Visuals:create_module({
     title = "ESP",
     description = "Colors and text",
@@ -223,12 +237,24 @@ local Interface = Settings:create_module({
 Interface:create_dropdown({
     title = "Theme",
     flag = "ui_theme",
-    options = { "Dark", "Light" },
-    maximum_options = 2,
+    options = Library.GetThemes(), -- Dark, Light, Ocean, ...
+    maximum_options = 6,
     callback = function(option)
         if ready then Library.SetTheme(option) end
     end,
 })
+
+Interface:create_colorpicker({
+    title = "Accent color",
+    flag = "ui_accent",
+    default = Color3.fromRGB(152, 181, 255),
+    notify = false,
+    callback = function(color)
+        Library.SetThemeColor("Accent", color)
+    end,
+})
+
+Interface:create_divider({ showtopic = true, title = "Divider uses the text color" })
 
 Interface:create_dropdown({
     title = "Notification style",
@@ -335,6 +361,7 @@ Config:create_button({
         })
     end,
 })
+
 Window:load()
 ready = true
 
