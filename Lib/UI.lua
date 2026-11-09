@@ -17,6 +17,8 @@ GG.GalacticText = GG.GalacticText ~= false
 GG.GalacticColor1 = GG.GalacticColor1 or Color3.fromRGB(99, 102, 241)
 GG.GalacticColor2 = GG.GalacticColor2 or Color3.fromRGB(236, 72, 153)
 GG.GalacticSpeed = GG.GalacticSpeed or 1.5
+GG.Search = GG.Search ~= false                      -- circle search button in the top-right corner
+GG.SearchKey = GG.SearchKey or Enum.KeyCode.F       -- Ctrl + this key opens the search
 GG.Themes = GG.Themes or nil                       -- custom themes: { Ocean = { Base = "Dark", Accent = Color3... } }
 GG.Version = GG.Version or "v2.0"                   -- shown in the sidebar info card
 GG.NotifyMode = GG.NotifyMode or nil                -- "new" (default) or "old"; nil = use the saved choice
@@ -2355,7 +2357,7 @@ function Library:create_ui()
     local ProgressHolder = mk('Frame', {
         Name = 'ProgressHolder',
         AnchorPoint = Vector2.new(1, 0),
-        Position = UDim2.new(1, -12, 0, 10),
+        Position = UDim2.new(1, -12, 0, 42),
         Size = UDim2.new(0, 214, 0, 0),
         AutomaticSize = Enum.AutomaticSize.Y,
         BackgroundTransparency = 1,
@@ -2612,6 +2614,493 @@ function Library:create_ui()
 
     function self:ProgressBar(settings)
         return createProgressBar(settings)
+    end
+
+    ---------------------------------------------------------------
+    -- Search: circle button in the top-right corner of the window (Ctrl+F)
+    -- Finds modules and their controls by name, then jumps to them.
+    -- GG.Search = false hides it, GG.SearchKey changes the key used with Ctrl.
+    ---------------------------------------------------------------
+    local SEARCH_MAX_RESULTS = 30
+    local SEARCH_ROW_HEIGHT = 38
+
+    -- Shown on the right of a result, taken from the control's instance name
+    local CONTROL_KINDS = {
+        Checkbox = "Toggle",
+        Slider = "Slider",
+        RangeSlider = "Range",
+        Dropdown = "Dropdown",
+        Button = "Button",
+        ColorPickerRow = "Color",
+        Paragraph = "Text",
+        Text = "Text",
+        TextLabel = "Input",
+        OuterFrame = "Divider",
+    }
+
+    local SearchButton = mk('TextButton', {
+        Name = 'SearchButton',
+        Text = '',
+        AutoButtonColor = false,
+        AnchorPoint = Vector2.new(1, 0),
+        Position = UDim2.new(1, -12, 0, 4),
+        Size = UDim2.fromOffset(28, 28),
+        BackgroundColor3 = CurrentTheme.Card,
+        BorderSizePixel = 0,
+        Visible = GG.Search ~= false,
+        ZIndex = 45,
+    }, Handler)
+    mk('UICorner', { CornerRadius = UDim.new(1, 0) }, SearchButton)
+    local SearchButtonStroke = mk('UIStroke', {
+        Color = CurrentTheme.Stroke,
+        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+    }, SearchButton)
+
+    local SearchIcon = mk('ImageLabel', {
+        Name = 'SearchIcon',
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.fromScale(0.5, 0.5),
+        Size = UDim2.fromOffset(14, 14),
+        BackgroundTransparency = 1,
+        ScaleType = Enum.ScaleType.Fit,
+        ZIndex = 46,
+    }, SearchButton)
+    if not applyIcon(SearchIcon, 'search') then
+        -- The Lucide library could not be loaded: show an emoji instead
+        SearchIcon.Visible = false
+        mk('TextLabel', {
+            Name = 'SearchFallback',
+            Size = UDim2.fromScale(1, 1),
+            BackgroundTransparency = 1,
+            Text = '\240\159\148\141',
+            TextSize = 13,
+            ZIndex = 46,
+        }, SearchButton)
+    end
+
+    local SearchPanel = mk('Frame', {
+        Name = 'SearchPanel',
+        Visible = false,
+        Active = true, -- also stops the window drag while using the panel
+        AnchorPoint = Vector2.new(1, 0),
+        Position = UDim2.new(1, -12, 0, 38),
+        Size = UDim2.fromOffset(280, 58),
+        BackgroundColor3 = CurrentTheme.ModuleBackground,
+        BackgroundTransparency = 0.02,
+        BorderSizePixel = 0,
+        ZIndex = 40,
+    }, Handler)
+    mk('UICorner', { CornerRadius = UDim.new(0, 12) }, SearchPanel)
+    local SearchPanelStroke = mk('UIStroke', {
+        Color = CurrentTheme.Stroke,
+        Thickness = 1.2,
+        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+    }, SearchPanel)
+
+    local SearchBox = mk('TextBox', {
+        Name = 'SearchBox',
+        Position = UDim2.fromOffset(10, 10),
+        Size = UDim2.new(1, -20, 0, 30),
+        BackgroundColor3 = CurrentTheme.Card,
+        BorderSizePixel = 0,
+        ClearTextOnFocus = false,
+        Font = Enum.Font.Gotham,
+        TextSize = 12,
+        TextColor3 = CurrentTheme.TextPrimary,
+        PlaceholderText = 'Search modules and functions...',
+        PlaceholderColor3 = CurrentTheme.TextSecondary,
+        Text = '',
+        TextXAlignment = Enum.TextXAlignment.Left,
+    }, SearchPanel)
+    mk('UICorner', { CornerRadius = UDim.new(0, 8) }, SearchBox)
+    mk('UIPadding', { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10) }, SearchBox)
+
+    local SearchResults = mk('ScrollingFrame', {
+        Name = 'SearchResults',
+        Position = UDim2.fromOffset(10, 48),
+        Size = UDim2.new(1, -20, 0, 0),
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        ScrollBarThickness = 2,
+        ScrollBarImageColor3 = CurrentTheme.Accent,
+        CanvasSize = UDim2.new(0, 0, 0, 0),
+        AutomaticCanvasSize = Enum.AutomaticSize.Y,
+    }, SearchPanel)
+    mk('UIListLayout', { Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder }, SearchResults)
+
+    local searchOpen = false
+
+    local function paintSearchButton(active)
+        SearchButton.BackgroundColor3 = active and CurrentTheme.Accent or CurrentTheme.Card
+        SearchIcon.ImageColor3 = active and contrastText(CurrentTheme.Accent) or CurrentTheme.TextSecondary
+    end
+    paintSearchButton(false)
+
+    local function isInside(guiObject, position)
+        local topLeft, size = guiObject.AbsolutePosition, guiObject.AbsoluteSize
+        return position.X >= topLeft.X and position.X <= topLeft.X + size.X
+            and position.Y >= topLeft.Y and position.Y <= topLeft.Y + size.Y
+    end
+
+    local function closeSearch()
+        if not searchOpen then
+            return
+        end
+        searchOpen = false
+        SearchPanel.Visible = false
+        SearchBox:ReleaseFocus()
+        paintSearchButton(false)
+        Connections:disconnect('search_outside')
+    end
+
+    -- First text found inside a control (its title), looking at children in creation order
+    local function findTitle(instance)
+        if (instance:IsA('TextLabel') or instance:IsA('TextButton')) and instance.Text ~= '' then
+            return (string.gsub(instance.Text, '^%s+', ''))
+        end
+        for _, child in ipairs(instance:GetChildren()) do
+            local title = findTitle(child)
+            if title then
+                return title
+            end
+        end
+        return nil
+    end
+
+    -- Every module and control of every tab, in the order they appear in the UI
+    local function buildSearchIndex()
+        local entries = {}
+
+        for _, tabManager in ipairs(self._tabs or {}) do
+            local tabTitle = findTitle(tabManager.Frame) or 'Tab'
+
+            for _, moduleManager in ipairs(tabManager.Modules or {}) do
+                local frame = moduleManager.Frame
+                local header = frame and frame:FindFirstChild('Header')
+                local nameLabel = header and header:FindFirstChild('ModuleName')
+                local descriptionLabel = header and header:FindFirstChild('Description')
+                local moduleTitle = nameLabel and nameLabel.Text or ''
+
+                if moduleTitle ~= '' then
+                    table.insert(entries, {
+                        Kind = 'Module',
+                        Title = moduleTitle,
+                        Context = tabTitle,
+                        Detail = descriptionLabel and descriptionLabel.Text or '',
+                        Tab = tabManager,
+                        Module = moduleManager,
+                        Target = frame,
+                    })
+
+                    local options = frame:FindFirstChild('Options')
+                    for _, control in ipairs(options and options:GetChildren() or {}) do
+                        local title = control:IsA('GuiObject') and findTitle(control) or nil
+                        if title and title ~= '' then
+                            table.insert(entries, {
+                                Kind = CONTROL_KINDS[control.Name] or 'Control',
+                                Title = title,
+                                Context = tabTitle .. '  >  ' .. moduleTitle,
+                                Detail = '',
+                                Tab = tabManager,
+                                Module = moduleManager,
+                                Target = control,
+                            })
+                        end
+                    end
+                end
+            end
+        end
+
+        return entries
+    end
+
+    -- All words of the query must appear in the title, tab, module or description
+    local function searchEntries(query)
+        local terms = {}
+        for term in string.gmatch(string.lower(query), '%S+') do
+            table.insert(terms, term)
+        end
+
+        local scored = {}
+        for order, entry in ipairs(buildSearchIndex()) do
+            local title = string.lower(entry.Title)
+            local haystack = title .. ' ' .. string.lower(entry.Context) .. ' ' .. string.lower(entry.Detail)
+
+            local matches = (#terms > 0) or entry.Kind == 'Module' -- empty query lists the modules only
+            for _, term in ipairs(terms) do
+                if not string.find(haystack, term, 1, true) then
+                    matches = false
+                    break
+                end
+            end
+
+            if matches then
+                local score = 0
+                local first = terms[1]
+                if first then
+                    if title == first then
+                        score = 3
+                    elseif string.sub(title, 1, #first) == first then
+                        score = 2
+                    elseif string.find(title, first, 1, true) then
+                        score = 1
+                    end
+                end
+                if entry.Kind == 'Module' then
+                    score += 0.5
+                end
+                table.insert(scored, { entry = entry, score = score, order = order })
+            end
+        end
+
+        table.sort(scored, function(left, right)
+            if left.score ~= right.score then
+                return left.score > right.score
+            end
+            return left.order < right.order
+        end)
+
+        local results = {}
+        for index = 1, math.min(#scored, SEARCH_MAX_RESULTS) do
+            results[index] = scored[index].entry
+        end
+        return results
+    end
+
+    -- Brief accent outline that fades out
+    local function highlightTarget(target)
+        local outline = mk('UIStroke', {
+            Color = CurrentTheme.Accent,
+            Thickness = 2,
+            ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
+        }, target)
+        local fade = TweenService:Create(outline, TweenInfo.new(1.8, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+            Transparency = 1,
+        })
+        fade:Play()
+        fade.Completed:Once(function()
+            outline:Destroy()
+        end)
+    end
+
+    local function scrollToTarget(tabManager, target)
+        local section = target:IsDescendantOf(tabManager.LeftSection) and tabManager.LeftSection or tabManager.RightSection
+        local scale = math.max(UIScale.Scale, 0.01)
+        local offset = (target.AbsolutePosition.Y - section.AbsolutePosition.Y) / scale + section.CanvasPosition.Y - 8
+        section.CanvasPosition = Vector2.new(0, math.max(0, offset))
+    end
+
+    local function goToEntry(entry)
+        local tabManager = entry.Tab
+        if tabManager._destroyed or not entry.Target.Parent then
+            return
+        end
+
+        closeSearch()
+        tabManager:Select()
+
+        task.spawn(function()
+            task.wait(0.05) -- let the layout settle after the tab became visible
+            if not entry.Target.Parent then
+                return
+            end
+
+            scrollToTarget(tabManager, entry.Target)
+            highlightTarget(entry.Target)
+
+            -- Controls are clipped while their module is off. We never switch it for the user,
+            -- because the module toggle also runs the module's callback.
+            if entry.Kind ~= 'Module' and not entry.Module._state then
+                Library.Notify.Info('Search', string.format('"%s" is inside "%s". Turn that module on to show it.', entry.Title, entry.Context), 4)
+            end
+        end)
+    end
+
+    local function renderResults()
+        for _, child in ipairs(SearchResults:GetChildren()) do
+            if child:IsA('GuiObject') then
+                child:Destroy()
+            end
+        end
+
+        local results = searchEntries(SearchBox.Text)
+        local listHeight
+
+        if #results == 0 then
+            mk('TextLabel', {
+                Name = 'Description', -- recolored with the secondary text color on theme changes
+                Size = UDim2.new(1, 0, 0, 26),
+                BackgroundTransparency = 1,
+                Font = Enum.Font.Gotham,
+                TextSize = 11,
+                TextColor3 = CurrentTheme.TextSecondary,
+                Text = 'No matches',
+            }, SearchResults)
+            listHeight = 26
+        else
+            for index, entry in ipairs(results) do
+                local Row = mk('TextButton', {
+                    Name = 'SearchResult',
+                    Text = '',
+                    AutoButtonColor = false,
+                    Size = UDim2.new(1, -6, 0, SEARCH_ROW_HEIGHT),
+                    BackgroundColor3 = CurrentTheme.Card,
+                    BackgroundTransparency = 0.4,
+                    BorderSizePixel = 0,
+                    LayoutOrder = index,
+                }, SearchResults)
+                mk('UICorner', { CornerRadius = UDim.new(0, 8) }, Row)
+
+                mk('TextLabel', {
+                    Name = 'ResultTitle',
+                    Position = UDim2.fromOffset(10, 4),
+                    Size = UDim2.new(1, -84, 0, 16),
+                    BackgroundTransparency = 1,
+                    Font = Enum.Font.GothamMedium,
+                    TextSize = 12,
+                    TextColor3 = CurrentTheme.TextPrimary,
+                    TextXAlignment = Enum.TextXAlignment.Left,
+                    TextTruncate = Enum.TextTruncate.AtEnd,
+                    Text = entry.Title,
+                }, Row)
+                mk('TextLabel', {
+                    Name = 'Description',
+                    Position = UDim2.fromOffset(10, 21),
+                    Size = UDim2.new(1, -20, 0, 13),
+                    BackgroundTransparency = 1,
+                    Font = Enum.Font.Gotham,
+                    TextSize = 10,
+                    TextColor3 = CurrentTheme.TextSecondary,
+                    TextXAlignment = Enum.TextXAlignment.Left,
+                    TextTruncate = Enum.TextTruncate.AtEnd,
+                    Text = entry.Context,
+                }, Row)
+                mk('TextLabel', {
+                    Name = 'Value',
+                    AnchorPoint = Vector2.new(1, 0),
+                    Position = UDim2.new(1, -8, 0, 5),
+                    Size = UDim2.fromOffset(62, 14),
+                    BackgroundTransparency = 1,
+                    Font = Enum.Font.GothamMedium,
+                    TextSize = 9,
+                    TextColor3 = CurrentTheme.TextSecondary,
+                    TextXAlignment = Enum.TextXAlignment.Right,
+                    Text = entry.Kind,
+                }, Row)
+
+                Row.MouseEnter:Connect(function()
+                    TweenService:Create(Row, TweenInfo.new(0.12), { BackgroundTransparency = 0.05 }):Play()
+                end)
+                Row.MouseLeave:Connect(function()
+                    TweenService:Create(Row, TweenInfo.new(0.12), { BackgroundTransparency = 0.4 }):Play()
+                end)
+                Row.MouseButton1Click:Connect(function()
+                    goToEntry(entry)
+                end)
+            end
+            listHeight = #results * (SEARCH_ROW_HEIGHT + 4)
+        end
+
+        local visibleHeight = math.min(listHeight, 250)
+        SearchResults.Size = UDim2.new(1, -20, 0, visibleHeight)
+        SearchResults.CanvasPosition = Vector2.new(0, 0)
+        SearchPanel.Size = UDim2.fromOffset(280, 58 + visibleHeight + 8)
+    end
+
+    local function openSearch(query)
+        if searchOpen then
+            if query then
+                SearchBox.Text = query
+            end
+            return
+        end
+
+        searchOpen = true
+        SearchBox.Text = query or ''
+        renderResults()
+        SearchPanel.Visible = true
+        paintSearchButton(true)
+
+        -- Click or tap outside the panel closes it
+        Connections['search_outside'] = UserInputService.InputBegan:Connect(function(input)
+            if input.UserInputType ~= Enum.UserInputType.MouseButton1 and input.UserInputType ~= Enum.UserInputType.Touch then
+                return
+            end
+            if not isInside(SearchPanel, input.Position) and not isInside(SearchButton, input.Position) then
+                closeSearch()
+            end
+        end)
+
+        task.defer(function()
+            if searchOpen then
+                SearchBox:CaptureFocus()
+            end
+        end)
+    end
+
+    SearchBox:GetPropertyChangedSignal('Text'):Connect(function()
+        if searchOpen then
+            renderResults()
+        end
+    end)
+
+    -- Enter jumps to the first result
+    SearchBox.FocusLost:Connect(function(enterPressed)
+        if enterPressed and searchOpen then
+            local first = searchEntries(SearchBox.Text)[1]
+            if first then
+                goToEntry(first)
+            end
+        end
+    end)
+
+    SearchButton.MouseButton1Click:Connect(function()
+        if searchOpen then
+            closeSearch()
+        else
+            openSearch()
+        end
+    end)
+
+    Connections['search_keys'] = UserInputService.InputBegan:Connect(function(input, processed)
+        if input.KeyCode == Enum.KeyCode.Escape and searchOpen then
+            closeSearch()
+            return
+        end
+
+        if processed or GG.Search == false or not self._ui_open or not MainGui.Enabled then
+            return
+        end
+
+        local searchKey = GG.SearchKey or Enum.KeyCode.F
+        local controlDown = UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) or UserInputService:IsKeyDown(Enum.KeyCode.RightControl)
+        if input.KeyCode == searchKey and controlDown then
+            openSearch()
+        end
+    end)
+
+    table.insert(Library._theme_hooks, function()
+        SearchButtonStroke.Color = CurrentTheme.Stroke
+        SearchPanelStroke.Color = CurrentTheme.Stroke
+        SearchPanel.BackgroundColor3 = CurrentTheme.ModuleBackground
+        SearchBox.BackgroundColor3 = CurrentTheme.Card
+        SearchBox.TextColor3 = CurrentTheme.TextPrimary
+        SearchBox.PlaceholderColor3 = CurrentTheme.TextSecondary
+        SearchResults.ScrollBarImageColor3 = CurrentTheme.Accent
+        paintSearchButton(searchOpen)
+    end)
+
+    -- Library.OpenSearch("speed") / Window:Search("speed")
+    function Library.OpenSearch(query)
+        openSearch(query)
+    end
+
+    function Library.CloseSearch()
+        closeSearch()
+    end
+
+    function self:Search(query)
+        openSearch(query)
     end
 
     function self:Update1Run(a)
@@ -2942,6 +3431,12 @@ function Library:create_ui()
         TabManager.RightSection = RightSection
         TabManager.Modules = {}
         table.insert(self._tabs, TabManager)
+
+        -- Show this tab (same as clicking its button)
+        function TabManager:Select()
+            window:update_tabs(Tab)
+            window:update_sections(LeftSection, RightSection)
+        end
 
         -- Remove the tab, its columns and every module inside it
         function TabManager:Destroy()
@@ -5035,7 +5530,11 @@ function Library:create_ui()
                 return Button
             end
 
-         function ModuleManager:create_colorpicker(settings: any)
+            -- ===================== Color Picker =====================
+            -- A swatch row that opens a popup: saturation/value square, hue bar,
+            -- hex box with copy button, preset colors and Cancel / Confirm.
+            -- settings: { title, flag, default = Color3, callback = function(color) end, notify = true }
+            function ModuleManager:create_colorpicker(settings: any)
                 LayoutOrderModule = LayoutOrderModule + 1
 
                 if self._size == 0 then self._size = 11 end
@@ -5350,7 +5849,10 @@ function Library:create_ui()
                         Text = "Confirm",
                     }, Confirm)
 
-                 -- Redraw knobs, hue tint and hex text. `exact` keeps an exact color (typed hex / presets)
+                    ---------------------------------------------------
+                    -- Logic
+                    ---------------------------------------------------
+                    -- Redraw knobs, hue tint and hex text. `exact` keeps an exact color (typed hex / presets)
                     local function refresh(exact)
                         working = exact or Color3.fromHSV(h, sat, val)
                         SV.BackgroundColor3 = Color3.fromHSV(h, 1, 1)
