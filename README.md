@@ -105,7 +105,7 @@ Additional Systems
 * Configuration saving.
 * Configuration exporting.
 * Configuration resetting.
-```css
+```lua
 ⸻
 
 Project Structure
@@ -147,60 +147,33 @@ Installation
 1. Load the Library
 
 Use the raw GitHub source to retrieve the main library file.
-```css
+```lua
 local BASE = "https://raw.githubusercontent.com/chienminh21/SoraxHikaru/main/"
 local Library = loadstring(
     game:HttpGet(BASE .. "Lib/UI.lua")
 )()
 ```
 2. Create a Window
-```css
+```lua
 local Window = Library.new()
 ```
 3. Create Tabs
-```css
+```lua
 local Main = Window:create_tab("Main", "home")
 local Visuals = Window:create_tab("Visuals", "eye")
 local Settings = Window:create_tab("Settings", "settings")
 ```
 4. Load the Interface
-```css
+```lua
 Window:load()
 ```
 ⸻
 
-Quick Start
+Example test
 
 The following example demonstrates the basic setup.
-```css
-getgenv().GG = {
-    UIName = "Sora x Hikaru",
-    Version = "v2.0",
-    Theme = "Dark",
-    Transparency = 0.15,
-    ToggleKey = Enum.KeyCode.Insert,
-    NotifyMode = "new",
-    Watermark = true,
-}
-local BASE = "https://raw.githubusercontent.com/chienminh21/SoraxHikaru/main/"
-local Library = loadstring(game:HttpGet(BASE .. "Lib/UI.lua"))()
-local Window = Library.new()
-local Main = Window:create_tab("Main", "home")
-local Example = Main:create_module({
-    title = "Example Module",
-    description = "A basic example module",
-    flag = "example_module",
-    callback = function(state)
-        print("Module:", state)
-    end,
-})
-Example:create_button({
-    title = "Click Me",
-    callback = function()
-        Library.Notify.Success("Example", "Button clicked!", 3)
-    end,
-})
-Window:load()
+```lua
+loadstring(game:HttpGet(”https://raw.githubusercontent.com/chienminh21/SoraxHikaru/refs/heads/main/Lib/Example.lua”))()
 ```
 ⸻
 
@@ -209,7 +182,7 @@ Configuration
 Configuration must be defined before loading the library.
 
 All options are optional in the supplied example.
-```css
+```lua
 getgenv().GG = {
     UIName = "Sora x Hikaru",
     Version = "v2.0",
@@ -244,7 +217,7 @@ Core Concepts
 Window
 
 The Window is the main container of the interface.
-```css
+```lua
 local Window = Library.new()
 ```
 It is responsible for creating and loading the UI.
@@ -252,7 +225,7 @@ It is responsible for creating and loading the UI.
 Tabs
 
 Tabs organize different sections of the interface.
-```css
+```lua
 local Main = Window:create_tab("Main", "home")
 local Visuals = Window:create_tab("Visuals", "eye")
 local Settings = Window:create_tab("Settings", "settings")
@@ -262,7 +235,7 @@ The second argument accepts an icon identifier.
 Modules
 
 Modules organize related controls inside a tab.
-```css
+```lua
 local Example = Main:create_module({
     title = "Example",
     description = "Example module",
@@ -291,7 +264,7 @@ Components
 Button
 
 Creates an interactive button.
-```css
+```lua
 Example:create_button({
     title = "Execute",
     callback = function()
@@ -302,7 +275,7 @@ Example:create_button({
 Checkbox
 
 Creates a Boolean control.
-```css
+```lua
 Example:create_checkbox({
     title = "Enable Feature",
     flag = "enable_feature",
@@ -314,7 +287,7 @@ Example:create_checkbox({
 Slider
 
 Creates a numeric slider.
-```css
+```lua
 Example:create_slider({
     title = "Speed",
     flag = "speed",
@@ -337,7 +310,7 @@ callback	Receives the selected value
 Range Slider
 
 Creates a slider with two values.
-```css
+```lua
 Example:create_range_slider({
     title = "Delay",
     flag = "delay",
@@ -356,7 +329,7 @@ The callback receives the selected minimum and maximum values.
 Dropdown
 
 Creates a single-selection dropdown.
-```css
+```lua
 Example:create_dropdown({
     title = "Target",
     flag = "target",
@@ -376,7 +349,7 @@ maximum_options is included in the supplied example and should be provided when 
 Multi-select Dropdown
 
 Use multi_dropdown = true to enable multiple selections.
-```css
+```lua
 Example:create_dropdown({
     title = "Items",
     flag = "items",
@@ -400,7 +373,7 @@ The selected list can be read from the configuration flags.
 Textbox
 
 Creates a text input.
-```css
+```lua
 Example:create_textbox({
     title = "Username",
     placeholder = "Enter your name...",
@@ -413,7 +386,7 @@ Example:create_textbox({
 Color Picker
 
 Creates a color selection control.
-```css
+```lua
 local ColorPicker = Example:create_colorpicker({
     title = "Outline Color",
     flag = "outline_color",
@@ -424,17 +397,17 @@ local ColorPicker = Example:create_colorpicker({
 })
 ```
 Read the selected color:
-```css
+```lua
 local currentColor = ColorPicker:Get()
 ```
 Change the selected color:
-```css
+```lua
 ColorPicker:Set(Color3.fromRGB(255, 0, 0))
 ```
 Divider
 
 Creates a visual divider.
-```css
+```lua
 Example:create_divider({
     showtopic = true,
     title = "Settings",
@@ -443,7 +416,7 @@ Example:create_divider({
 Paragraph
 
 Creates a paragraph for additional information.
-```css
+```lua
 Example:create_paragraph({
     title = "Information",
     text = "This is an example paragraph.",
@@ -453,14 +426,14 @@ Example:create_paragraph({
 Text
 
 Creates a text element that can be updated.
-```css
+```lua
 local Status = Example:create_text({
     text = "Status: Idle",
     CustomYSize = 24,
 })
 ```
 Update the text:
-```css
+```lua
 Status:Set({
     text = "Status: Ready",
 })
@@ -472,7 +445,7 @@ Notifications
 Sora x Hikaru provides several notification types.
 
 Info
-```css
+```lua
 Library.Notify.Info(
     "Information",
     "Something happened.",
@@ -480,7 +453,7 @@ Library.Notify.Info(
 )
 ```
 Success
-```css
+```lua
 Library.Notify.Success(
     "Success",
     "Operation completed.",
@@ -496,7 +469,7 @@ Library.Notify.Warn(
 )
 ```
 Error
-```css
+```lua
 Library.Notify.Error(
     "Error",
     "Something went wrong.",
@@ -506,7 +479,7 @@ Library.Notify.Error(
 Custom Notification
 
 Use Library.Notify.Send() to provide additional notification options.
-```css
+```lua
 Library.Notify.Send({
     title = "Sora x Hikaru",
     text = "Welcome!",
@@ -527,7 +500,7 @@ duration	Display duration
 Dialogs
 
 Dialogs can be used to display information and request confirmation.
-```css
+```lua
 Window:Dialog({
     Icon = "alert-circle",
     IconThemed = true,
@@ -573,7 +546,7 @@ Each button can define a title, icon, variant, and callback.
 Progress Bar
 
 The progress bar provides a way to display progress for an operation.
-```css
+```lua
 local Progress = Main:ProgressBar({
     Title = "Download",
     Desc = "Downloading files...",
@@ -597,7 +570,7 @@ local Progress = Main:ProgressBar({
 Progress Methods
 
 Reset the progress:
-```css
+```lua
 Progress:Reset()
 
 Set a specific value:
@@ -621,15 +594,15 @@ Theme Management
 The library supports Dark and Light themes through its configuration and theme setter.
 
 Set Theme
-```css
+```lua
 Library.SetTheme("Dark")
 ```
 Or:
-```css
+```lua
 Library.SetTheme("Light")
 ```
 Theme Dropdown
-```css
+```lua
 Interface:create_dropdown({
     title = "Theme",
     flag = "ui_theme",
@@ -652,11 +625,11 @@ The ready flag prevents initialization callbacks from triggering additional side
 Transparency
 
 Change the window transparency:
-```css
+```lua
 Library.SetTransparency(0.15)
 ```
 A slider can be used to control transparency dynamically.
-```css
+```lua
 Interface:create_slider({
     title = "Window Transparency",
     flag = "ui_transparency",
@@ -676,20 +649,20 @@ Background Customization
 The library supports image backgrounds through Window:SetImageBackground().
 
 Set Background
-```css
+```lua
 Window:SetImageBackground(
     "rbxassetid://123456789"
 )
 ```
 Set Background Style
-```css
+```lua
 Window:SetImageBackground(
     "rbxassetid://123456789",
     "Crop"
 )
 ```
 Set Background Transparency
-```css
+```lua
 Window:SetImageBackground(
     "rbxassetid://123456789",
     nil,
@@ -724,7 +697,7 @@ Toggle
 Library.SetWatermark(not Library._watermark_on)
 
 The initial visibility can also be configured using:
-```css
+```lua
 getgenv().GG = {
     Watermark = true,
 }
@@ -734,11 +707,11 @@ getgenv().GG = {
 Notification Style
 
 The notification mode can be configured with:
-```css
+```lua
 Library.SetNotifyMode("new")
 ```
 Or:
-```css
+```lua
 Library.SetNotifyMode("old")
 ```
 Available configuration values:
@@ -751,7 +724,7 @@ Available configuration values:
 Configuration Management
 
 The library includes configuration management methods.
-```css
+```lua
 Save Configuration
 
 Library.SaveConfig()
@@ -765,7 +738,7 @@ Reset Configuration
 Library.ResetConfig()
 
 These methods can be connected to buttons inside a module.
-```css
+```lua
 local Config = Settings:create_module({
     title = "Config",
     description = "Manage your configuration",
@@ -808,7 +781,7 @@ The example includes:
 ⸻
 
 API Reference
-```css
+```lua
 API	Description
 Library.new()	Creates a new window
 Window:create_tab()	Creates a tab
