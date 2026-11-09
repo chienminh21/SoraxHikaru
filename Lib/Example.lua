@@ -19,17 +19,20 @@ getgenv().GG = {
     TextColor = nil,                 -- optional: Color3 for all main UI text (dividers follow it)
     Transparency = 0.15,             -- window transparency (0 = solid)
     ToggleKey = Enum.KeyCode.Insert, -- key that shows / hides the window
-    NotifyMode = "new",              -- notification style: "new" or "old"
-    Watermark = true,                -- icon in a screen corner (also toggled by the "Show watermark" pill)
+    NotifyMode = "old",              -- notification style: "new" or "old"
+    Search = true,                   -- circle search button in the top-right corner (Ctrl+F)
+    SearchKey = Enum.KeyCode.F,      -- key used together with Ctrl
+    Watermark = false,                -- icon in a screen corner (also toggled by the "Show watermark" pill)
     WatermarkIcon = "rbxassetid://76051962811019", -- asset id / image URL / Lucide name
     WatermarkSize = 40,              -- icon size in pixels
     WatermarkPosition = "TopLeft",   -- TopLeft | TopRight | BottomLeft | BottomRight
     WatermarkTransparency = 0,       -- 0 = solid, 1 = invisible
-    WatermarkText = "",              -- optional text next to the icon, "{fps}" shows the FPS
+    WatermarkText = "{fps}",              -- optional text next to the icon, "{fps}" shows the FPS
     ImageBackground = "",            -- "rbxassetid://..." / image URL / "" (none)
     ImageBackgroundStyle = "Crop",   -- Stretch | Fit | Crop | Tile | FadeLeft | FadeRight | FadeTop | FadeBottom
     ImageBackgroundTransparency = 0.7,
 }
+
 
 local BASE = "https://raw.githubusercontent.com/chienminh21/SoraxHikaru/main/"
 local Library = loadstring(game:HttpGet(BASE .. "Lib/UI.lua"))()
