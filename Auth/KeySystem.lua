@@ -24,9 +24,6 @@ local state = {
     Listeners = {},
 }
 
----------------------------------------------------------------------
--- Small helpers
----------------------------------------------------------------------
 local function new(class, props, parent)
     local object = Instance.new(class)
     for key, value in pairs(props or {}) do
@@ -83,9 +80,8 @@ local function getColors(Library)
     }
 end
 
----------------------------------------------------------------------
 -- Saved key (workspace/<FolderName>/key_<service>.txt)
----------------------------------------------------------------------
+
 local function savePathFor(serviceName)
     local folder = globalConfig().FolderName or "SoraHikaru"
     return folder, folder .. "/key_" .. sanitize(serviceName) .. ".txt"
@@ -126,14 +122,14 @@ local function deleteSavedKey(path)
     end)
 end
 
----------------------------------------------------------------------
+
 -- Services
 -- A service is a table (or function) that checks a key. Accepted validate names:
 -- Validate, Verify, Check, CheckKey, Authenticate, Auth, Login.
 -- It is called as validate(key, context) (no self) and may return:
 --   true / false, message, data
 --   or a table { Success | success | Valid | valid | ok, Message | message, Data | data }
----------------------------------------------------------------------
+
 local function pickValidator(service)
     if type(service) == "function" then
         return service
@@ -305,9 +301,6 @@ local function buildInfo(key, serviceName, message, data)
     return info
 end
 
----------------------------------------------------------------------
--- Window
----------------------------------------------------------------------
 -- hooks: OnSubmit(key, remember), OnGetKey(), OnSkip(), OnClose()
 local function buildWindow(Library, config, hasLink, canRemember, hooks)
     local colors = getColors(Library)
@@ -665,9 +658,8 @@ local function buildWindow(Library, config, hasLink, canRemember, hooks)
     return controller
 end
 
----------------------------------------------------------------------
+
 -- State and public API
----------------------------------------------------------------------
 local function notify(Library, kind, title, text)
     pcall(function()
         Library.Notify[kind](title, text, 4)
