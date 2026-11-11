@@ -204,31 +204,162 @@ local function loadServiceFile(name, base)
     return service
 end
 
--- Load Registry + Manager from repo when available; otherwise use inline fallbacks
+-- Inline minimal Registry/Manager so Local multi-provider works offline.
+-- Remote Auth/Registry.lua + Services/* are used when available.
+local function buildInlineRegistry()
+    local reg = { _providers = {} }
+    local aliases = {
+        local = "Local",
+        custom = "Custom",
+        platoboost = "Platoboost",
+        panda = "PandaDevelopment",
+        pandadevelopment = "PandaDevelopment",
+        luarmor = "Luarmor",
+        junkie = "JunkieDevelopment",
+        junkiedevelopment = "JunkieDevelopment",
+    }
+
+    function reg.NormalizeType(name)
+        if type(name) ~= "string" then return nil end
+        local key = string.lower((string.gsub(name, "%s+", "")))
+        return aliases[key] or name
+    end
+
+    function reg.Register(name, factory)
+        reg._providers[reg.NormalizeType(name) or name] = factory
+        return true
+    end
+
+    function reg.Get(name)
+        local key = reg.NormalizeType(name)
+        return key and reg._providers[key] or nil
+    end
+
+    function reg.Create(providerConfig)
+        if type(providerConfig) ~= "table" then
+            return nil, "provider config must be a table"
+        end
+        local typeName = reg.NormalizeType(providerConfig.Type or providerConfig.Provider or providerConfig.Name)
+        if not typeName then
+            return nil, "provider Type is required"
+        end
+        local factory = reg.Get(typeName)
+        if not factory then
+            return nil, 'unknown provider "' .. tostring(providerConfig.Type) .. '"'
+        end
+        local ok, service = pcall(factory, providerConfig)
+        if not ok then
+            return nil, "provider init failed: " .. tostring(service)
+        end
+        if type(service) ~= "table" then
+            return nil, "provider did not return a service table"
+        end
+        service.Name = service.Name or typeName
+        return service
+    end
+
+    -- Built-in Local factory (always available)
+    reg.Register("Local", function(options)
+        options = options or {}
+        local keys = options.Keys or options.keys or {}
+        local caseSensitive = options.CaseSensitive == true
+        local lookup = {}
+        for _, key in ipairs(keys) do
+            local value = trim(key)
+            if value ~= "" then
+                lookup[caseSensitive and value or string.upper(value)] = true
+            end
+        end
+        local function Validate(key)
+            key = trim(key)
+            if key == "" then return false, "Empty key" end
+            local value = caseSensitive and key or string.upper(key)
+            if lookup[value] then
+                return true, "Key accepted", { Provider = "Local" }
+            end
+            return false, "Invalid key"
+        end
+        return {
+            Name = "Local",
+            Validate = Validate,
+            Verify = Validate,
+            GetKeyLink = options.GetKeyLink,
+        }
+    end)
+
+    -- Custom factory
+    reg.Register("Custom", function(options)
+        options = options or {}
+        local handler = options.Handler or options.Service or options.Validate
+        local validator
+        if type(handler) == "function" then
+            validator = handler
+        elseif type(handler) == "table" then
+            for _, field in ipairs(VALIDATE_FIELDS) do
+                if type(handler[field]) == "function" then
+                    validator = handler[field]
+                    break
+                end
+            end
+        end
+        if not validator then
+            error("Custom provider needs Handler/Service with Validate")
+        end
+        return {
+            Name = options.Name or "Custom",
+            Validate = function(key, ctx) return validator(key, ctx) end,
+            Verify = function(key, ctx) return validator(key, ctx) end,
+            GetKeyLink = options.GetKeyLink,
+        }
+    end)
+
+    return reg
+end
+
 local function ensureModules(config)
     if Registry and Manager then return true end
 
     local base = (config and config.AuthBase) or "https://raw.githubusercontent.com/chienminh21/SoraxHikaru/main/Auth/"
     local function fetchModule(rel)
         local ok, src = pcall(function() return game:HttpGet(base .. rel) end)
-        if not ok then return nil end
-        local fn, err = loadstring(src, "=" .. rel)
+        if not ok or type(src) ~= "string" or #src < 20 then return nil end
+        -- GitHub 404 pages are HTML
+        if string.find(src, "<!DOCTYPE html>", 1, true) or string.find(src, "404: Not Found", 1, true) then
+            return nil
+        end
+        local fn = loadstring(src, "=" .. rel)
         if not fn then return nil end
         local ok2, mod = pcall(fn)
-        if ok2 then return mod end
+        if ok2 and type(mod) == "table" then return mod end
         return nil
     end
 
-    Registry = fetchModule("Registry.lua")
-    Manager = fetchModule("Manager.lua")
+    local remoteRegistry = fetchModule("Registry.lua")
+    local remoteManager = fetchModule("Manager.lua")
 
-    if Registry and type(Registry.BootstrapBuiltins) == "function" then
-        Registry.BootstrapBuiltins(function(name)
-            return loadServiceFile(name, (config and config.ServicesBase) or DEFAULT_SERVICES_BASE)
-        end)
+    Registry = remoteRegistry or buildInlineRegistry()
+    Manager = remoteManager -- optional
+
+    -- Register remote service modules when Registry exists
+    if Registry and type(Registry.Register) == "function" then
+        local servicesBase = (config and config.ServicesBase) or DEFAULT_SERVICES_BASE
+        for _, name in ipairs({ "Platoboost", "PandaDevelopment", "Luarmor", "JunkieDevelopment", "Local", "Custom" }) do
+            if not Registry.Get or not Registry.Get(name) then
+                local mod = loadServiceFile(name, servicesBase)
+                if type(mod) == "table" and type(mod.New) == "function" then
+                    Registry.Register(name, mod.New)
+                end
+            end
+        end
+        -- Always ensure Local/Custom inline factories exist
+        if not Registry.Get("Local") then
+            local inline = buildInlineRegistry()
+            Registry.Register("Local", inline.Get("Local"))
+            Registry.Register("Custom", inline.Get("Custom"))
+        end
     end
 
-    return Registry ~= nil and Manager ~= nil
+    return Registry ~= nil
 end
 
 local function resolveServices(config)
