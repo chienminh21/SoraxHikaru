@@ -209,14 +209,14 @@ end
 local function buildInlineRegistry()
     local reg = { _providers = {} }
     local aliases = {
-        local = "Local",
-        custom = "Custom",
-        platoboost = "Platoboost",
-        panda = "PandaDevelopment",
-        pandadevelopment = "PandaDevelopment",
-        luarmor = "Luarmor",
-        junkie = "JunkieDevelopment",
-        junkiedevelopment = "JunkieDevelopment",
+        ["local"] = "Local",
+        ["custom"] = "Custom",
+        ["platoboost"] = "Platoboost",
+        ["panda"] = "PandaDevelopment",
+        ["pandadevelopment"] = "PandaDevelopment",
+        ["luarmor"] = "Luarmor",
+        ["junkie"] = "JunkieDevelopment",
+        ["junkiedevelopment"] = "JunkieDevelopment",
     }
 
     function reg.NormalizeType(name)
