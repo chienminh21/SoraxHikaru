@@ -44,23 +44,22 @@ local function createAuthentication()
 
     -- Local provider for testing.
     -- Replace this with your real provider configuration when ready.
-    local provider, providerError = Registry:Create({
-        Type = "local",
-        Keys = {
-            "SORAXHIKARU-TEST",
-            "PHIPHAI-TEST",
-        },
-    }, {
-        Util = Util,
+    
+local provider, providerError = Registry:Create({
+    Type = "pandadevelopment",
+    ServiceId = "Name",     -- is u name service 
+}, {
+    Util = Util,
 
-        Load = function(path)
-            return loadModule("Auth/" .. path)
-        end,
-    })
+    Load = function(path)
+        return loadModule("Auth/" .. path)
+    end,
+})
 
-    if not provider then
-        error(providerError)
-    end
+if not provider then
+    error(providerError)
+end
+
 
     local Manager = ManagerModule.new({
         Util = Util,
