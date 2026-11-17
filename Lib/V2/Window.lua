@@ -9,7 +9,7 @@ Window.__index = Window
 local UserInputService = game:GetService("UserInputService")
 local CoreGui = game:GetService("CoreGui")
 
-local windowWidth, windowHeight, topbarHeight, sidebarWidth = 760, 500, 48, 176
+local windowWidth, windowHeight, topbarHeight, sidebarWidth = 698, 479, 48, 164
 
 local defaultCategories = {
     { "Combat", "swords" },
@@ -104,7 +104,7 @@ function Window.new(options)
         ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
     }, guiParent())
 
-    -- Root frame (saved position, scaled down on small screens)
+    -- Root frame (saved position, scaled to fit smaller screens)
     local camera = workspace.CurrentCamera
     local viewport = camera and camera.ViewportSize or Vector2.new(1280, 720)
     local root = create("Frame", {
@@ -117,7 +117,15 @@ function Window.new(options)
     Components.corner(root, 12)
     Components.bind(ctx, root, { BackgroundColor3 = "MainColor" })
     Components.stroke(ctx, root)
-    create("UIScale", { Scale = math.clamp((viewport.X - 24) / (windowWidth + 24), 0.5, 1) }, root)
+
+    local scaleX = (viewport.X - 24) / windowWidth
+    local scaleY = (viewport.Y - 24) / windowHeight
+    local windowScale = math.clamp(math.min(scaleX, scaleY), 0.35, 1)
+
+    create("UIScale", {
+        Scale = windowScale,
+    }, root)
+
     self._root = root
 
     local saved = options.Store:Get("window.Position")
