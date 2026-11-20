@@ -7,10 +7,16 @@
         local Combat = Window:AddTab("Combat", "swords")
         local card = Combat:AddFeature({ Name = "Auto Parry", Description = "...", Setting = true, Notification = true, Callback = function(state, source) end })
 
+    No tabs exist until you add them with Window:AddTab(name, icon). A tab named GUI gets the Appearance section
+    and a tab named Config gets the configuration buttons.
     Window:AddTab / tab:AddFeature / card:AddToggle, AddSlider, AddDropdown, AddButton, AddText, AddDivider,
-    Window:Search / Show / Hide / Toggle / Minimize / Destroy, and the UI v1 style create_tab / create_module
-    methods (Compat) keep their V2 behavior. V2.new options: Library, Folder, Preset ("Dark" | "Light" |
-    "Pure Black" | "Midnight"), Title, Version, Categories, ToggleKey, NotificationSoundId, Transparency, Logo, GalacticText.
+    Window:Search / SetOpen / IsOpen / Show / Hide / Toggle / Minimize / Destroy, and the UI v1 style create_tab /
+    create_module methods (Compat) keep their V2 behavior.
+    The window is open at 698 x 479 and collapses to 150 x 40. The title bar (logo and name), the floating logo
+    button and the toggle key (Insert) all switch the same state.
+    V2.new options: Library, Folder, Preset ("Dark" | "Light" | "Pure Black" | "Midnight"), Title, Version,
+    Categories (optional list of { name, icon } to create at start), ToggleKey, NotificationSoundId, Transparency,
+    Logo, GalacticText.
 ]]
 
 local modules = {}
@@ -1850,6 +1856,7 @@ function Panels.new(ctx, root)
             Size = UDim2.fromOffset(320, 0),
             AutomaticSize = Enum.AutomaticSize.Y,
             BorderSizePixel = 0,
+            ClipsDescendants = true,
             ZIndex = 51,
         }, scrim)
         Components.corner(panel, 14)
@@ -1878,17 +1885,24 @@ function Panels.new(ctx, root)
 
         local body = create("ScrollingFrame", {
             Size = UDim2.new(1, 0, 0, 0),
-            AutomaticSize = Enum.AutomaticSize.Y,
             AutomaticCanvasSize = Enum.AutomaticSize.Y,
             CanvasSize = UDim2.new(),
             ScrollBarThickness = 3,
             BackgroundTransparency = 1,
             BorderSizePixel = 0,
+            ClipsDescendants = true,
             LayoutOrder = 2,
         }, panel)
-        create("UISizeConstraint", { MaxSize = Vector2.new(math.huge, 340) }, body)
-        create("UIListLayout", { Padding = UDim.new(0, 12), SortOrder = Enum.SortOrder.LayoutOrder }, body)
+        local bodyLayout = create("UIListLayout", { Padding = UDim.new(0, 12), SortOrder = Enum.SortOrder.LayoutOrder }, body)
         create("UIPadding", { PaddingRight = UDim.new(0, 8) }, body)
+
+        -- The body is as tall as its rows, but never taller than the window leaves room for
+        -- (the header, the panel padding and a margin take 104): longer content scrolls.
+        local maxBodyHeight = math.max(120, root.Size.Y.Offset - 104)
+        local function fitBody()
+            body.Size = UDim2.new(1, 0, 0, math.min(bodyLayout.AbsoluteContentSize.Y, maxBodyHeight))
+        end
+        janitor:Connect(bodyLayout:GetPropertyChangedSignal("AbsoluteContentSize"), fitBody)
 
         local rowsJanitor = ctx.NewJanitor()
         janitor:Add(function()
@@ -1903,6 +1917,7 @@ function Panels.new(ctx, root)
                 end
             end
             build(body, Components.child(ctx, rowsJanitor))
+            fitBody()
         end
         render()
 
@@ -2069,27 +2084,14 @@ Window.__index = Window
 
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 local TextService = game:GetService("TextService")
 local CoreGui = game:GetService("CoreGui")
 
 local windowWidth, windowHeight = 698, 479
+local collapsedWidth, collapsedHeight = 150, 40
 local sidebarWidth, dragBandHeight, contentTop = 164, 44, 40
 local logoImage = "rbxassetid://107819132007001"
-
-local defaultCategories = {
-    { "Combat", "swords" },
-    { "Movement", "footprints" },
-    { "Visuals", "eye" },
-    { "Player", "user" },
-    { "World", "globe" },
-    { "Avatar", "shirt" },
-    { "Remotes", "radio" },
-    { "Teleports", "map-pin" },
-    { "Misc", "ellipsis" },
-    { "Scripts", "scroll-text" },
-    { "Config", "sliders-horizontal" },
-    { "GUI", "layout-dashboard" },
-}
 
 local colorRows = {
     { "Main Color", "MainColor" },
@@ -2143,7 +2145,8 @@ function Window.new(options)
     self._tabList = {}
     self._selected = nil
     self._destroyed = false
-    self._minimized = false
+    self._open = true
+    self._topControls = {}
     self.Theme = options.Theme
     self.Store = options.Store
 
@@ -2209,6 +2212,38 @@ function Window.new(options)
 
     local body = create("Frame", { Name = "Body", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1 }, root)
     self._body = body
+
+    -- Clicking the title bar (the logo and name area) switches between open and collapsed.
+    -- Moving the pointer more than a few pixels is a drag of the window, not a click.
+    local function isPress(input)
+        return input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch
+    end
+    local titlePress = nil
+    self._janitor:Connect(dragBand.InputBegan, function(input)
+        if not isPress(input) then
+            return
+        end
+        local localX = (input.Position.X - root.AbsolutePosition.X) / self._scale.Scale
+        if localX >= 0 and localX <= sidebarWidth then
+            titlePress = { position = input.Position, moved = false }
+        end
+    end)
+    self._janitor:Connect(UserInputService.InputChanged, function(input)
+        if titlePress and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            if (input.Position - titlePress.position).Magnitude > 5 then
+                titlePress.moved = true
+            end
+        end
+    end)
+    self._janitor:Connect(UserInputService.InputEnded, function(input)
+        if titlePress and isPress(input) then
+            local press = titlePress
+            titlePress = nil
+            if not press.moved then
+                self:Toggle()
+            end
+        end
+    end)
 
     -- Sidebar header: logo and the name
     local nameX = 15
@@ -2305,8 +2340,8 @@ function Window.new(options)
         button.Position = UDim2.fromScale(0, 0)
         return circle
     end
-    circleButton("x", "x", -12, function() self:Hide() end)
-    circleButton("minus", "-", -44, function() self:Minimize(not self._minimized) end)
+    table.insert(self._topControls, circleButton("x", "x", -12, function() self:Hide() end))
+    table.insert(self._topControls, circleButton("minus", "-", -44, function() self:Minimize(true) end))
 
     local searchBox = create("Frame", {
         AnchorPoint = Vector2.new(1, 0),
@@ -2318,6 +2353,7 @@ function Window.new(options)
     Components.corner(searchBox, 13)
     Components.bind(ctx, searchBox, { BackgroundColor3 = "Secondary" })
     Components.stroke(ctx, searchBox, "Stroke", 0.5)
+    table.insert(self._topControls, searchBox)
     Components.icon(ctx, searchBox, { Name = "search", Fallback = "?", Size = 14, Position = UDim2.fromOffset(10, 6) })
     local searchInput = create("TextBox", {
         Position = UDim2.fromOffset(30, 0),
@@ -2335,22 +2371,29 @@ function Window.new(options)
         self:Search(searchInput.Text)
     end)
 
-    -- Launcher: shown while the window is hidden (also the way back on devices without a keyboard)
+    -- Floating button with the logo: always visible, switches the window between open and collapsed.
+    -- It can be dragged; a press that moves is a drag, not a click.
     self._launcher = create("TextButton", {
         Name = "Launcher",
-        Visible = false,
         AutoButtonColor = false,
+        Text = "",
         Size = UDim2.fromOffset(44, 44),
+        BackgroundTransparency = 0.15,
         BorderSizePixel = 0,
-        FontFace = Components.font(Enum.FontWeight.Bold),
-        TextSize = 12,
-        Text = "SxH",
     }, self._gui)
     Components.corner(self._launcher, 22)
-    Components.bind(ctx, self._launcher, {
-        BackgroundColor3 = "Accent",
-        TextColor3 = function(theme) return Components.contrast(theme:Get("Accent")) end,
-    })
+    Components.bind(ctx, self._launcher, { BackgroundColor3 = "Secondary" })
+    Components.stroke(ctx, self._launcher, "Accent", 0.3)
+    local launcherLogo = create("ImageLabel", {
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.fromScale(0.5, 0.5),
+        Size = UDim2.fromOffset(24, 24),
+        BackgroundTransparency = 1,
+        Image = options.Logo or logoImage,
+        ScaleType = Enum.ScaleType.Fit,
+    }, self._launcher)
+    Components.bind(ctx, launcherLogo, { ImageColor3 = "Accent" })
+
     local launcherSaved = options.Store:Get("positions.launcher")
     if type(launcherSaved) == "table" and launcherSaved.XS then
         self._launcher.Position = UDim2.new(launcherSaved.XS, launcherSaved.XO, launcherSaved.YS, launcherSaved.YO)
@@ -2360,8 +2403,28 @@ function Window.new(options)
     Components.draggable(ctx, self._launcher, self._launcher, function(position)
         options.Store:Set("positions.launcher", positionRecord(position))
     end)
-    self._janitor:Connect(self._launcher.MouseButton1Click, function()
-        self:Show()
+
+    local launcherPress = nil
+    self._janitor:Connect(self._launcher.InputBegan, function(input)
+        if isPress(input) then
+            launcherPress = { position = input.Position, moved = false }
+        end
+    end)
+    self._janitor:Connect(UserInputService.InputChanged, function(input)
+        if launcherPress and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            if (input.Position - launcherPress.position).Magnitude > 5 then
+                launcherPress.moved = true
+            end
+        end
+    end)
+    self._janitor:Connect(UserInputService.InputEnded, function(input)
+        if launcherPress and isPress(input) then
+            local press = launcherPress
+            launcherPress = nil
+            if not press.moved then
+                self:Toggle()
+            end
+        end
     end)
 
     -- Keybinds for features and the window toggle key. A recorded key or a focused textbox is ignored.
@@ -2383,23 +2446,12 @@ function Window.new(options)
         end
     end)
 
-    local categories = options.Categories
-    if categories == nil then
-        categories = defaultCategories
-    end
-    if categories then
-        for _, category in ipairs(categories) do
+    -- No tabs are created for you: add them with Window:AddTab(name, icon).
+    -- Categories (optional) is a list of { name, icon } to create right away.
+    if type(options.Categories) == "table" then
+        for _, category in ipairs(options.Categories) do
             self:AddTab(category[1], category[2])
         end
-        if self._tabs.GUI then
-            self:_buildAppearance(self._tabs.GUI)
-        end
-        if self._tabs.Config then
-            self:_buildConfig(self._tabs.Config)
-        end
-    end
-    if self._tabList[1] then
-        self:SelectTab(self._tabList[1].Name)
     end
 
     self._version = options.Version or "v2.0"
@@ -2470,7 +2522,7 @@ end
 
 function Window:_movePin()
     local tab = self._selected
-    if not tab or not self._pin.Parent then
+    if not tab or not self._pin.Parent or not self._open then
         return
     end
     local y = (tab.Button.AbsolutePosition.Y - self._root.AbsolutePosition.Y) / self._scale.Scale + 11
@@ -2590,6 +2642,13 @@ function Window:AddTab(name, icon)
     -- def: see Feature.new. Column = 1 or 2 picks a column, otherwise the emptier one is used.
     function tab:AddFeature(def)
         return self.Window:_addFeatureCard(self, def)
+    end
+
+    -- A tab you name GUI gets the Appearance section, one named Config gets the configuration buttons
+    if name == "GUI" then
+        self:_buildAppearance(tab)
+    elseif name == "Config" then
+        self:_buildConfig(tab)
     end
 
     if not self._selected then
@@ -3045,37 +3104,58 @@ end
 
 -- Window state -----------------------------------------------------------
 
-function Window:Show()
-    self._root.Visible = true
-    self._launcher.Visible = false
-    task.defer(function()
-        if not self._destroyed then
-            self:_movePin()
+function Window:IsOpen()
+    return self._open
+end
+
+-- The one place that changes the state. The title bar, the floating button, the toggle key and the
+-- top right buttons all end up here: open is 698 x 479, collapsed is 150 x 40.
+function Window:SetOpen(state)
+    state = state == true
+    if state == self._open then
+        return
+    end
+    self._open = state
+
+    if not state then
+        self._panels.Close()
+        for _, control in ipairs(self._topControls) do
+            control.Visible = false
         end
-    end)
-end
+    end
 
-function Window:Hide()
-    self._panels.Close()
-    self._root.Visible = false
-    self._launcher.Visible = true
-end
+    local goal = state and UDim2.fromOffset(windowWidth, windowHeight) or UDim2.fromOffset(collapsedWidth, collapsedHeight)
+    local tween = TweenService:Create(self._root, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), { Size = goal })
+    tween:Play()
 
-function Window:Toggle()
-    if self._root.Visible then
-        self:Hide()
-    else
-        self:Show()
+    if state then
+        -- the top right controls are anchored to the window edge: show them once it is full size again
+        tween.Completed:Once(function()
+            if self._open and not self._destroyed then
+                for _, control in ipairs(self._topControls) do
+                    control.Visible = true
+                end
+                self:_movePin()
+            end
+        end)
     end
 end
 
--- Collapses the window to its top band and restores it
+function Window:Show()
+    self:SetOpen(true)
+end
+
+function Window:Hide()
+    self:SetOpen(false)
+end
+
+function Window:Toggle()
+    self:SetOpen(not self._open)
+end
+
+-- Minimize(true) collapses, Minimize(false) opens
 function Window:Minimize(state)
-    self._minimized = state == true
-    self._body.Visible = not self._minimized
-    self._modules.Components.tween(self._root, {
-        Size = UDim2.fromOffset(windowWidth, self._minimized and dragBandHeight or windowHeight),
-    }, 0.3)
+    self:SetOpen(state ~= true)
 end
 
 -- Removes every widget, connection, subscription and floating button, then saves
