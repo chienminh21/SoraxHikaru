@@ -16,7 +16,7 @@
     button and the toggle key (Insert) all switch the same state.
     V2.new options: Library, Folder, Preset ("Dark" | "Light" | "Pure Black" | "Midnight"), Title, Version,
     Categories (optional list of { name, icon } to create at start), ToggleKey, NotificationSoundId, Transparency,
-    Logo, GalacticText.
+    Logo, GalacticText, ButtonOpenMenu (boolean, default false: show/hide the floating menu launcher).
 ]]
 
 local modules = {}
@@ -1853,7 +1853,7 @@ function Panels.new(ctx, root)
             Active = true,
             AnchorPoint = Vector2.new(0.5, 0.5),
             Position = UDim2.fromScale(0.5, 0.5),
-            Size = UDim2.fromOffset(320, 0),
+            Size = UDim2.fromOffset(300, 0),
             AutomaticSize = Enum.AutomaticSize.Y,
             BorderSizePixel = 0,
             ClipsDescendants = true,
@@ -1898,7 +1898,7 @@ function Panels.new(ctx, root)
 
         -- The body is as tall as its rows, but never taller than the window leaves room for
         -- (the header, the panel padding and a margin take 104): longer content scrolls.
-        local maxBodyHeight = math.max(120, root.Size.Y.Offset - 104)
+        local maxBodyHeight = math.max(120, math.min(root.Size.Y.Offset - 150, 300))
         local function fitBody()
             body.Size = UDim2.new(1, 0, 0, math.min(bodyLayout.AbsoluteContentSize.Y, maxBodyHeight))
         end
@@ -2124,7 +2124,7 @@ end
 -- options: Modules (defaults to the modules of this file), Theme, Store, Library (UI v1, optional: icons and
 -- notifications), Title, Version, Categories (list of { name, lucide icon } or false), ToggleKey,
 -- NotificationSoundId, Transparency (window background, default 0.15), Logo (image or false),
--- GalacticText (animated gradient on the name, default true)
+-- GalacticText (animated gradient on the name, default true), ButtonOpenMenu (floating launcher, default false)
 function Window.new(options)
     local modules = options.Modules or modules
     local Components = modules.Components
@@ -2371,61 +2371,62 @@ function Window.new(options)
         self:Search(searchInput.Text)
     end)
 
-    -- Floating button with the logo: always visible, switches the window between open and collapsed.
-    -- It can be dragged; a press that moves is a drag, not a click.
-    self._launcher = create("TextButton", {
-        Name = "Launcher",
-        AutoButtonColor = false,
-        Text = "",
-        Size = UDim2.fromOffset(44, 44),
-        BackgroundTransparency = 0.15,
-        BorderSizePixel = 0,
-    }, self._gui)
-    Components.corner(self._launcher, 22)
-    Components.bind(ctx, self._launcher, { BackgroundColor3 = "Secondary" })
-    Components.stroke(ctx, self._launcher, "Accent", 0.3)
-    local launcherLogo = create("ImageLabel", {
-        AnchorPoint = Vector2.new(0.5, 0.5),
-        Position = UDim2.fromScale(0.5, 0.5),
-        Size = UDim2.fromOffset(24, 24),
-        BackgroundTransparency = 1,
-        Image = options.Logo or logoImage,
-        ScaleType = Enum.ScaleType.Fit,
-    }, self._launcher)
-    Components.bind(ctx, launcherLogo, { ImageColor3 = "Accent" })
+    -- Optional floating launcher. Disabled by default; the configured toggle key remains available.
+    if options.ButtonOpenMenu == true then
+            self._launcher = create("TextButton", {
+            Name = "Launcher",
+            AutoButtonColor = false,
+            Text = "",
+            Size = UDim2.fromOffset(44, 44),
+            BackgroundTransparency = 0.15,
+            BorderSizePixel = 0,
+        }, self._gui)
+        Components.corner(self._launcher, 22)
+        Components.bind(ctx, self._launcher, { BackgroundColor3 = "Secondary" })
+        Components.stroke(ctx, self._launcher, "Accent", 0.3)
+        local launcherLogo = create("ImageLabel", {
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.fromScale(0.5, 0.5),
+            Size = UDim2.fromOffset(24, 24),
+            BackgroundTransparency = 1,
+            Image = options.Logo or logoImage,
+            ScaleType = Enum.ScaleType.Fit,
+        }, self._launcher)
+        Components.bind(ctx, launcherLogo, { ImageColor3 = "Accent" })
 
-    local launcherSaved = options.Store:Get("positions.launcher")
-    if type(launcherSaved) == "table" and launcherSaved.XS then
-        self._launcher.Position = UDim2.new(launcherSaved.XS, launcherSaved.XO, launcherSaved.YS, launcherSaved.YO)
-    else
-        self._launcher.Position = UDim2.new(0, 16, 0.5, -22)
+        local launcherSaved = options.Store:Get("positions.launcher")
+        if type(launcherSaved) == "table" and launcherSaved.XS then
+            self._launcher.Position = UDim2.new(launcherSaved.XS, launcherSaved.XO, launcherSaved.YS, launcherSaved.YO)
+        else
+            self._launcher.Position = UDim2.new(0, 16, 0.5, -22)
+        end
+        Components.draggable(ctx, self._launcher, self._launcher, function(position)
+            options.Store:Set("positions.launcher", positionRecord(position))
+        end)
+
+        local launcherPress = nil
+        self._janitor:Connect(self._launcher.InputBegan, function(input)
+            if isPress(input) then
+                launcherPress = { position = input.Position, moved = false }
+            end
+        end)
+        self._janitor:Connect(UserInputService.InputChanged, function(input)
+            if launcherPress and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                if (input.Position - launcherPress.position).Magnitude > 5 then
+                    launcherPress.moved = true
+                end
+            end
+        end)
+        self._janitor:Connect(UserInputService.InputEnded, function(input)
+            if launcherPress and isPress(input) then
+                local press = launcherPress
+                launcherPress = nil
+                if not press.moved then
+                    self:Toggle()
+                end
+            end
+        end)
     end
-    Components.draggable(ctx, self._launcher, self._launcher, function(position)
-        options.Store:Set("positions.launcher", positionRecord(position))
-    end)
-
-    local launcherPress = nil
-    self._janitor:Connect(self._launcher.InputBegan, function(input)
-        if isPress(input) then
-            launcherPress = { position = input.Position, moved = false }
-        end
-    end)
-    self._janitor:Connect(UserInputService.InputChanged, function(input)
-        if launcherPress and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-            if (input.Position - launcherPress.position).Magnitude > 5 then
-                launcherPress.moved = true
-            end
-        end
-    end)
-    self._janitor:Connect(UserInputService.InputEnded, function(input)
-        if launcherPress and isPress(input) then
-            local press = launcherPress
-            launcherPress = nil
-            if not press.moved then
-                self:Toggle()
-            end
-        end
-    end)
 
     -- Keybinds for features and the window toggle key. A recorded key or a focused textbox is ignored.
     self._janitor:Connect(UserInputService.InputBegan, function(input, processed)
@@ -3308,6 +3309,7 @@ function V2.new(options)
         Transparency = options.Transparency or gg.Transparency,
         Logo = options.Logo,
         GalacticText = options.GalacticText,
+        ButtonOpenMenu = options.ButtonOpenMenu == true,
     })
     modules.Compat.apply(window)
     return window
