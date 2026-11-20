@@ -1898,9 +1898,12 @@ function Panels.new(ctx, root)
 
         -- The body is as tall as its rows, but never taller than the window leaves room for
         -- (the header, the panel padding and a margin take 104): longer content scrolls.
-        local maxBodyHeight = math.max(120, math.min(root.Size.Y.Offset - 150, 300))
+        local function getMaxBodyHeight()
+            local availableHeight = root.AbsoluteSize.Y / math.max(root:FindFirstChildOfClass("UIScale") and root:FindFirstChildOfClass("UIScale").Scale or 1, 0.01)
+            return math.max(120, math.min(availableHeight - 179, 300))
+        end
         local function fitBody()
-            body.Size = UDim2.new(1, 0, 0, math.min(bodyLayout.AbsoluteContentSize.Y, maxBodyHeight))
+            body.Size = UDim2.new(1, 0, 0, math.min(bodyLayout.AbsoluteContentSize.Y, getMaxBodyHeight()))
         end
         janitor:Connect(bodyLayout:GetPropertyChangedSignal("AbsoluteContentSize"), fitBody)
 
@@ -2179,11 +2182,14 @@ function Window.new(options)
 
     local camera = workspace.CurrentCamera
     local viewport = camera and camera.ViewportSize or Vector2.new(1280, 720)
-    local windowScale = math.clamp(math.min((viewport.X - 24) / windowWidth, (viewport.Y - 24) / windowHeight), 0.35, 1)
+    local function getWindowScale(viewportSize)
+        return math.clamp(math.min((viewportSize.X - 24) / windowWidth, (viewportSize.Y - 24) / windowHeight), 0.35, 1)
+    end
 
     local root = create("Frame", {
         Name = "Root",
         AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.fromScale(0.5, 0.5),
         Size = UDim2.fromOffset(windowWidth, windowHeight),
         BackgroundTransparency = options.Transparency or 0.15,
         ClipsDescendants = true,
@@ -2192,8 +2198,26 @@ function Window.new(options)
     Components.corner(root, 12)
     Components.bind(ctx, root, { BackgroundColor3 = "MainColor" })
     Components.stroke(ctx, root, "Stroke", 0.3)
-    self._scale = create("UIScale", { Scale = windowScale }, root)
+    self._scale = create("UIScale", { Scale = getWindowScale(viewport) }, root)
     self._root = root
+
+    -- Keep the same 698 x 479 design size while scaling it to the available viewport.
+    local function updateWindowScale()
+        local currentCamera = workspace.CurrentCamera
+        if currentCamera then
+            self._scale.Scale = getWindowScale(currentCamera.ViewportSize)
+        end
+    end
+    if camera then
+        self._janitor:Connect(camera:GetPropertyChangedSignal("ViewportSize"), updateWindowScale)
+    end
+    self._janitor:Connect(workspace:GetPropertyChangedSignal("CurrentCamera"), function()
+        local currentCamera = workspace.CurrentCamera
+        if currentCamera then
+            self._janitor:Connect(currentCamera:GetPropertyChangedSignal("ViewportSize"), updateWindowScale)
+            updateWindowScale()
+        end
+    end)
 
     local savedPosition = options.Store:Get("window.Position")
     if type(savedPosition) == "table" and savedPosition.XS then
@@ -2299,7 +2323,7 @@ function Window.new(options)
     local nav = create("ScrollingFrame", {
         Name = "Tabs",
         Position = UDim2.fromOffset(10, 55),
-        Size = UDim2.fromOffset(sidebarWidth - 20, 330),
+        Size = UDim2.fromOffset(sidebarWidth - 20, windowHeight - 149),
         BackgroundTransparency = 1,
         BorderSizePixel = 0,
         ScrollBarThickness = 0,
