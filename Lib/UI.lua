@@ -21,6 +21,7 @@ GG.Search = GG.Search ~= false                      -- circle search button in t
 GG.SearchKey = GG.SearchKey or Enum.KeyCode.F       -- Ctrl + this key opens the search
 GG.Themes = GG.Themes or nil                       -- custom themes: { Ocean = { Base = "Dark", Accent = Color3... } }
 GG.Version = GG.Version or "v2.0"                   -- shown in the sidebar info card
+GG.NotificationSoundId = GG.NotificationSoundId or nil  -- "rbxassetid://..." played by the notification "Sound" option of a module
 GG.NotifyMode = GG.NotifyMode or nil                -- "new" (default) or "old"; nil = use the saved choice
 GG.ImageBackground = GG.ImageBackground or ""       -- image behind the window: "rbxassetid://..." / image URL / "" (none)
 GG.ImageBackgroundStyle = GG.ImageBackgroundStyle or "Crop"  -- Stretch | Fit | Crop | Tile | FadeLeft | FadeRight | FadeTop | FadeBottom
@@ -2022,6 +2023,10 @@ function Library:create_ui()
     self:removed(function()
         self._ui = nil
         Connections:disconnect_all()
+        if Library._floating_gui then
+            Library._floating_gui:Destroy()
+            Library._floating_gui = nil
+        end
     end)
 
     ---------------------------------------------------------------
@@ -3286,6 +3291,455 @@ function Library:create_ui()
         end
     end
 
+    ---------------------------------------------------------------
+    -- Module settings and notification panels (opened by the gear and the bell of a module)
+    -- spec = { Title, Subtitle, Rows = function() return { row, ... } end }
+    -- row  = { Type = "Toggle" | "Segmented" | "Keybind" | "Slider" | "Button", Name, Get(), Set(value),
+    --          Options, Min, Max, Step, Action() }
+    ---------------------------------------------------------------
+    local modulePanel = nil
+
+    local function closeModulePanel()
+        if not modulePanel then
+            return
+        end
+        local open = modulePanel
+        modulePanel = nil
+        open.cleanup()
+        open.overlay:Destroy()
+    end
+
+    local function openModulePanel(spec)
+        closeModulePanel()
+
+        local T = CurrentTheme
+        local panelConnections = {}
+        local rowConnections = {}
+        local viewport = workspace.CurrentCamera.ViewportSize
+        local panelScale = math.clamp(math.min((viewport.X - 24) / 324, (viewport.Y - 24) / 420), 0.55, 1)
+        local semibold = Font.new('rbxasset://fonts/families/GothamSSm.json', Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
+
+        local Overlay = mk('TextButton', {
+            Name = 'ModulePanelOverlay',
+            Text = '',
+            AutoButtonColor = false,
+            Position = UDim2.new(0, 0, 0, -100),
+            Size = UDim2.new(1, 0, 1, 100),
+            BackgroundColor3 = Color3.new(0, 0, 0),
+            BackgroundTransparency = 1,
+            BorderSizePixel = 0,
+            ZIndex = 100,
+        }, MainGui)
+
+        local Card = mk('Frame', {
+            Name = 'ModulePanelCard',
+            Active = true,
+            AnchorPoint = Vector2.new(0.5, 0.5),
+            Position = UDim2.new(0.5, 0, 0.5, 0),
+            Size = UDim2.new(0, 300, 0, 0),
+            AutomaticSize = Enum.AutomaticSize.Y,
+            BackgroundColor3 = T.ModuleBackground,
+            BorderSizePixel = 0,
+            ClipsDescendants = true,
+            ZIndex = 101,
+        }, Overlay)
+        mk('UICorner', { CornerRadius = UDim.new(0, 14) }, Card)
+        mk('UIStroke', { Color = T.Stroke, Thickness = 1.5, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, Card)
+        local CardScale = mk('UIScale', { Scale = panelScale * 0.92 }, Card)
+        mk('UIPadding', {
+            PaddingTop = UDim.new(0, 18),
+            PaddingBottom = UDim.new(0, 16),
+            PaddingLeft = UDim.new(0, 18),
+            PaddingRight = UDim.new(0, 18),
+        }, Card)
+        mk('UIListLayout', { Padding = UDim.new(0, 12), SortOrder = Enum.SortOrder.LayoutOrder }, Card)
+
+        local Header = mk('Frame', { Name = 'PanelHeader', BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 34), LayoutOrder = 1 }, Card)
+        mk('TextLabel', {
+            Name = 'PanelTitle',
+            Size = UDim2.new(1, -40, 0, 18),
+            BackgroundTransparency = 1,
+            Font = Enum.Font.GothamBold,
+            TextSize = 15,
+            TextColor3 = T.TextPrimary,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextTruncate = Enum.TextTruncate.AtEnd,
+            Text = tostring(spec.Title or 'Module'),
+            ZIndex = 102,
+        }, Header)
+        mk('TextLabel', {
+            Name = 'Description',
+            Position = UDim2.fromOffset(0, 19),
+            Size = UDim2.new(1, -40, 0, 14),
+            BackgroundTransparency = 1,
+            FontFace = semibold,
+            TextSize = 10,
+            TextColor3 = T.TextSecondary,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            Text = tostring(spec.Subtitle or ''),
+            ZIndex = 102,
+        }, Header)
+        local CloseButton = mk('TextButton', {
+            Name = 'PanelClose',
+            AnchorPoint = Vector2.new(1, 0),
+            Position = UDim2.fromScale(1, 0),
+            Size = UDim2.fromOffset(26, 26),
+            AutoButtonColor = false,
+            BackgroundColor3 = T.Card,
+            BorderSizePixel = 0,
+            Font = Enum.Font.GothamBold,
+            TextSize = 11,
+            TextColor3 = T.TextSecondary,
+            Text = 'X',
+            ZIndex = 103,
+        }, Header)
+        mk('UICorner', { CornerRadius = UDim.new(0, 6) }, CloseButton)
+
+        -- The body is as tall as its rows but never taller than the screen leaves room for: longer content scrolls
+        local Body = mk('ScrollingFrame', {
+            Name = 'PanelBody',
+            Size = UDim2.new(1, 0, 0, 0),
+            BackgroundTransparency = 1,
+            BorderSizePixel = 0,
+            ScrollBarThickness = 3,
+            ScrollBarImageColor3 = T.Accent,
+            AutomaticCanvasSize = Enum.AutomaticSize.Y,
+            CanvasSize = UDim2.new(0, 0, 0, 0),
+            ClipsDescendants = true,
+            LayoutOrder = 2,
+            ZIndex = 102,
+        }, Card)
+        local BodyLayout = mk('UIListLayout', { Padding = UDim.new(0, 12), SortOrder = Enum.SortOrder.LayoutOrder }, Body)
+        mk('UIPadding', { PaddingRight = UDim.new(0, 8) }, Body)
+        local maxBodyHeight = math.clamp(math.floor(viewport.Y / panelScale) - 150, 120, 340)
+        local function fitBody()
+            Body.Size = UDim2.new(1, 0, 0, math.min(BodyLayout.AbsoluteContentSize.Y, maxBodyHeight))
+        end
+        table.insert(panelConnections, BodyLayout:GetPropertyChangedSignal('AbsoluteContentSize'):Connect(fitBody))
+
+        local function clearRows()
+            for _, connection in ipairs(rowConnections) do
+                connection:Disconnect()
+            end
+            table.clear(rowConnections)
+            for _, child in ipairs(Body:GetChildren()) do
+                if child:IsA('GuiObject') then
+                    child:Destroy()
+                end
+            end
+        end
+
+        local render
+
+        local function addRow(row, order)
+            local Line = mk('Frame', {
+                Name = 'PanelRow',
+                Size = UDim2.new(1, 0, 0, 0),
+                AutomaticSize = Enum.AutomaticSize.Y,
+                BackgroundTransparency = 1,
+                LayoutOrder = order,
+            }, Body)
+            mk('UIListLayout', { Padding = UDim.new(0, 5), SortOrder = Enum.SortOrder.LayoutOrder }, Line)
+
+            if row.Type == 'Button' then
+                local Button = mk('TextButton', {
+                    Name = 'PanelButton',
+                    Size = UDim2.new(1, 0, 0, 26),
+                    AutoButtonColor = false,
+                    BackgroundColor3 = T.Accent,
+                    BackgroundTransparency = 0.15,
+                    BorderSizePixel = 0,
+                    Font = Enum.Font.GothamBold,
+                    TextSize = 12,
+                    TextColor3 = Color3.fromRGB(255, 255, 255),
+                    Text = row.Name,
+                    ZIndex = 103,
+                }, Line)
+                mk('UICorner', { CornerRadius = UDim.new(0, 6) }, Button)
+                mk('UIStroke', { Color = T.Accent, Transparency = 0.4 }, Button)
+                table.insert(rowConnections, Button.MouseEnter:Connect(function()
+                    TweenService:Create(Button, TweenInfo.new(0.2), { BackgroundTransparency = 0 }):Play()
+                end))
+                table.insert(rowConnections, Button.MouseLeave:Connect(function()
+                    TweenService:Create(Button, TweenInfo.new(0.2), { BackgroundTransparency = 0.15 }):Play()
+                end))
+                table.insert(rowConnections, Button.MouseButton1Click:Connect(function()
+                    row.Action()
+                    render()
+                end))
+                return
+            end
+
+            local Top = mk('Frame', { Name = 'PanelTop', Size = UDim2.new(1, 0, 0, 22), BackgroundTransparency = 1, LayoutOrder = 1 }, Line)
+            mk('TextLabel', {
+                Name = 'PanelLabel',
+                Size = UDim2.new(1, -90, 1, 0),
+                BackgroundTransparency = 1,
+                FontFace = semibold,
+                TextSize = 11,
+                TextColor3 = T.TextPrimary,
+                TextTransparency = 0.2,
+                TextXAlignment = Enum.TextXAlignment.Left,
+                Text = row.Name,
+                ZIndex = 103,
+            }, Top)
+
+            if row.Type == 'Toggle' then
+                local state = row.Get() == true
+                local Track = mk('TextButton', {
+                    Name = 'PanelToggle',
+                    Text = '',
+                    AutoButtonColor = false,
+                    AnchorPoint = Vector2.new(1, 0.5),
+                    Position = UDim2.new(1, 0, 0.5, 0),
+                    Size = UDim2.fromOffset(25, 12),
+                    BackgroundColor3 = state and T.Accent or Color3.new(0, 0, 0),
+                    BackgroundTransparency = 0.7,
+                    BorderSizePixel = 0,
+                    ZIndex = 103,
+                }, Top)
+                mk('UICorner', { CornerRadius = UDim.new(1, 0) }, Track)
+                local Knob = mk('Frame', {
+                    AnchorPoint = Vector2.new(0, 0.5),
+                    Position = state and UDim2.fromScale(0.53, 0.5) or UDim2.fromScale(0, 0.5),
+                    Size = UDim2.fromOffset(12, 12),
+                    BackgroundColor3 = state and T.Accent or T.ToggleOff,
+                    BackgroundTransparency = 0.2,
+                    BorderSizePixel = 0,
+                    ZIndex = 104,
+                }, Track)
+                mk('UICorner', { CornerRadius = UDim.new(1, 0) }, Knob)
+                table.insert(rowConnections, Track.MouseButton1Click:Connect(function()
+                    state = not state
+                    local info = TweenInfo.new(0.4, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+                    TweenService:Create(Track, info, { BackgroundColor3 = state and T.Accent or Color3.new(0, 0, 0) }):Play()
+                    TweenService:Create(Knob, info, {
+                        BackgroundColor3 = state and T.Accent or T.ToggleOff,
+                        Position = state and UDim2.fromScale(0.53, 0.5) or UDim2.fromScale(0, 0.5),
+                    }):Play()
+                    row.Set(state)
+                end))
+
+            elseif row.Type == 'Segmented' then
+                local Segments = mk('Frame', {
+                    Name = 'PanelSegments',
+                    AnchorPoint = Vector2.new(1, 0.5),
+                    Position = UDim2.new(1, 0, 0.5, 0),
+                    Size = UDim2.fromOffset(0, 22),
+                    AutomaticSize = Enum.AutomaticSize.X,
+                    BackgroundColor3 = T.Accent,
+                    BackgroundTransparency = 0.9,
+                    BorderSizePixel = 0,
+                    ZIndex = 103,
+                }, Top)
+                mk('UICorner', { CornerRadius = UDim.new(0, 4) }, Segments)
+                mk('UIListLayout', { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 2), SortOrder = Enum.SortOrder.LayoutOrder }, Segments)
+                mk('UIPadding', { PaddingLeft = UDim.new(0, 2), PaddingRight = UDim.new(0, 2), PaddingTop = UDim.new(0, 2), PaddingBottom = UDim.new(0, 2) }, Segments)
+                local buttons = {}
+                local function paint(value)
+                    for option, button in pairs(buttons) do
+                        local selected = option == value
+                        button.BackgroundTransparency = selected and 0.7 or 1
+                        button.TextTransparency = selected and 0.1 or 0.6
+                    end
+                end
+                for index, option in ipairs(row.Options) do
+                    local Button = mk('TextButton', {
+                        AutoButtonColor = false,
+                        Size = UDim2.fromOffset(0, 18),
+                        AutomaticSize = Enum.AutomaticSize.X,
+                        BackgroundColor3 = T.Accent,
+                        BorderSizePixel = 0,
+                        FontFace = semibold,
+                        TextSize = 10,
+                        TextColor3 = T.TextPrimary,
+                        Text = option,
+                        LayoutOrder = index,
+                        ZIndex = 104,
+                    }, Segments)
+                    mk('UICorner', { CornerRadius = UDim.new(0, 3) }, Button)
+                    mk('UIPadding', { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10) }, Button)
+                    buttons[option] = Button
+                    table.insert(rowConnections, Button.MouseButton1Click:Connect(function()
+                        row.Set(option)
+                        paint(option)
+                    end))
+                end
+                paint(row.Get())
+
+            elseif row.Type == 'Keybind' then
+                local Chip = mk('TextButton', {
+                    Name = 'PanelKeybind',
+                    AutoButtonColor = false,
+                    AnchorPoint = Vector2.new(1, 0.5),
+                    Position = UDim2.new(1, 0, 0.5, 0),
+                    Size = UDim2.fromOffset(72, 20),
+                    BackgroundColor3 = T.Accent,
+                    BackgroundTransparency = 0.7,
+                    BorderSizePixel = 0,
+                    FontFace = semibold,
+                    TextSize = 10,
+                    TextColor3 = T.TextPrimary,
+                    Text = row.Get() or 'None',
+                    ZIndex = 103,
+                }, Top)
+                mk('UICorner', { CornerRadius = UDim.new(0, 3) }, Chip)
+                local listening = false
+                table.insert(rowConnections, Chip.MouseButton1Click:Connect(function()
+                    if listening or Library._choosing_keybind then
+                        return
+                    end
+                    listening = true
+                    Library._choosing_keybind = true
+                    Chip.Text = '...'
+
+                    local connection
+                    connection = UserInputService.InputBegan:Connect(function(input)
+                        if input.UserInputType ~= Enum.UserInputType.Keyboard or input.KeyCode == Enum.KeyCode.Unknown then
+                            return
+                        end
+                        connection:Disconnect()
+                        listening = false
+                        -- Escape also closes the panel: keep the "choosing" flag until this frame is over
+                        task.defer(function()
+                            Library._choosing_keybind = false
+                        end)
+                        if input.KeyCode == Enum.KeyCode.Backspace or input.KeyCode == Enum.KeyCode.Escape then
+                            row.Set(nil)
+                        else
+                            row.Set(input.KeyCode)
+                        end
+                        Chip.Text = row.Get() or 'None'
+                    end)
+                    table.insert(rowConnections, connection)
+                end))
+
+            elseif row.Type == 'Slider' then
+                local minimum, maximum, step = row.Min or 0, row.Max or 100, row.Step
+                local value = math.clamp(row.Get() or minimum, minimum, maximum)
+                local ValueLabel = mk('TextLabel', {
+                    Name = 'Value',
+                    AnchorPoint = Vector2.new(1, 0.5),
+                    Position = UDim2.new(1, 0, 0.5, 0),
+                    Size = UDim2.fromOffset(60, 13),
+                    BackgroundTransparency = 1,
+                    FontFace = semibold,
+                    TextSize = 10,
+                    TextColor3 = T.TextSecondary,
+                    TextXAlignment = Enum.TextXAlignment.Right,
+                    Text = tostring(value),
+                    ZIndex = 103,
+                }, Top)
+                local Holder = mk('Frame', { Name = 'PanelSlider', Size = UDim2.new(1, 0, 0, 14), BackgroundTransparency = 1, LayoutOrder = 2 }, Line)
+                local Bar = mk('Frame', {
+                    AnchorPoint = Vector2.new(0, 0.5),
+                    Position = UDim2.fromScale(0, 0.5),
+                    Size = UDim2.new(1, 0, 0, 4),
+                    BackgroundColor3 = T.Accent,
+                    BackgroundTransparency = 0.9,
+                    BorderSizePixel = 0,
+                    ZIndex = 103,
+                }, Holder)
+                mk('UICorner', { CornerRadius = UDim.new(1, 0) }, Bar)
+                local BarFill = mk('Frame', { Size = UDim2.fromScale(0, 1), BackgroundColor3 = T.Accent, BackgroundTransparency = 0.5, BorderSizePixel = 0, ZIndex = 104 }, Bar)
+                mk('UICorner', { CornerRadius = UDim.new(1, 0) }, BarFill)
+                local BarKnob = mk('Frame', {
+                    AnchorPoint = Vector2.new(0.5, 0.5),
+                    Size = UDim2.fromOffset(8, 8),
+                    BackgroundColor3 = Color3.new(1, 1, 1),
+                    BorderSizePixel = 0,
+                    ZIndex = 105,
+                }, Bar)
+                mk('UICorner', { CornerRadius = UDim.new(1, 0) }, BarKnob)
+
+                local function renderSlider()
+                    local fraction = maximum == minimum and 0 or (value - minimum) / (maximum - minimum)
+                    BarFill.Size = UDim2.fromScale(fraction, 1)
+                    BarKnob.Position = UDim2.fromScale(fraction, 0.5)
+                    ValueLabel.Text = tostring(value)
+                end
+                renderSlider()
+
+                local function setFromPosition(position)
+                    local fraction = math.clamp((position.X - Bar.AbsolutePosition.X) / math.max(Bar.AbsoluteSize.X, 1), 0, 1)
+                    local newValue = minimum + (maximum - minimum) * fraction
+                    if step and step > 0 then
+                        newValue = math.clamp(math.floor(newValue / step + 0.5) * step, minimum, maximum)
+                    end
+                    if newValue ~= value then
+                        value = newValue
+                        renderSlider()
+                        row.Set(value)
+                    end
+                end
+
+                local dragging = false
+                table.insert(rowConnections, Holder.InputBegan:Connect(function(input)
+                    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                        dragging = true
+                        setFromPosition(input.Position)
+                    end
+                end))
+                table.insert(rowConnections, UserInputService.InputChanged:Connect(function(input)
+                    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                        setFromPosition(input.Position)
+                    end
+                end))
+                table.insert(rowConnections, UserInputService.InputEnded:Connect(function(input)
+                    if dragging and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
+                        dragging = false
+                    end
+                end))
+            end
+        end
+
+        -- Builds the rows again from the current values (after Reset)
+        render = function()
+            clearRows()
+            for index, row in ipairs(spec.Rows()) do
+                addRow(row, index)
+            end
+            fitBody()
+        end
+        render()
+
+        table.insert(panelConnections, Overlay.MouseButton1Click:Connect(closeModulePanel))
+        table.insert(panelConnections, CloseButton.MouseButton1Click:Connect(closeModulePanel))
+        table.insert(panelConnections, UserInputService.InputBegan:Connect(function(input)
+            if input.KeyCode == Enum.KeyCode.Escape and not Library._choosing_keybind then
+                closeModulePanel()
+            end
+        end))
+
+        modulePanel = {
+            overlay = Overlay,
+            cleanup = function()
+                for _, connection in ipairs(panelConnections) do
+                    connection:Disconnect()
+                end
+                clearRows()
+            end,
+        }
+
+        TweenService:Create(Overlay, TweenInfo.new(0.2), { BackgroundTransparency = 0.45 }):Play()
+        TweenService:Create(CardScale, TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), { Scale = panelScale }):Play()
+    end
+
+    -- Floating buttons (the "Show Button" setting) live in their own ScreenGui so they stay visible when the window is hidden
+    local function getFloatingGui()
+        if Library._floating_gui and Library._floating_gui.Parent then
+            return Library._floating_gui
+        end
+        Library._floating_gui = mk('ScreenGui', {
+            Name = GUI_NAME .. '_Floating',
+            ResetOnSpawn = false,
+            IgnoreGuiInset = true,
+            DisplayOrder = 450,
+            ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+        }, getGuiParent())
+        return Library._floating_gui
+    end
+
     function self:create_tab(title: string, icon: string)
         local TabManager = {}
         local window = self
@@ -3550,6 +4004,10 @@ function Library:create_ui()
 
                 Connections:disconnect(settings.flag .. '_keybind')
                 Connections:disconnect(settings.flag .. '_input_began')
+                Connections:disconnect(settings.flag .. '_keybind_end')
+                if ModuleManager._cleanup_extras then
+                    ModuleManager._cleanup_extras()
+                end
                 if Library._choosing_keybind then
                     Connections:disconnect('keybind_choose_start')
                     Library._choosing_keybind = false
@@ -3802,6 +4260,65 @@ function Library:create_ui()
             Options.ChildAdded:Connect(schedule_size_refresh)
             Options.ChildRemoved:Connect(schedule_size_refresh)
 
+            -- Optional gear (settings) and bell (notification) buttons: settings.setting / settings.notification.
+            -- They are independent of each other and of the main toggle.
+            local hasSetting = settings.setting == true or settings.Setting == true
+            local hasNotification = settings.notification == true or settings.Notification == true
+            local extraHooks = {}  -- theme hooks owned by this module
+
+            -- Saved values of this module (config -> _library -> module_settings -> flag)
+            local function moduleRecord()
+                Library._config._library = Library._config._library or {}
+                local library = Library._config._library
+                library.module_settings = library.module_settings or {}
+                local record = library.module_settings[settings.flag]
+                if type(record) ~= 'table' then
+                    record = {}
+                    library.module_settings[settings.flag] = record
+                end
+                if record.ActivationMode ~= 'Hold' then record.ActivationMode = 'Toggle' end
+                if record.StartupState ~= 'On' then record.StartupState = 'Off' end
+                if type(record.ShowStatus) ~= 'boolean' then record.ShowStatus = true end
+                if type(record.ShowButton) ~= 'boolean' then record.ShowButton = false end
+                if type(record.Notify) ~= 'table' then record.Notify = {} end
+                local notify = record.Notify
+                if type(notify.Enabled) ~= 'boolean' then notify.Enabled = true end
+                if type(notify.OnEnabled) ~= 'boolean' then notify.OnEnabled = true end
+                if type(notify.OnDisabled) ~= 'boolean' then notify.OnDisabled = true end
+                if type(notify.Sound) ~= 'boolean' then notify.Sound = false end
+                if type(notify.Duration) ~= 'number' then notify.Duration = 3 end
+                return record
+            end
+
+            -- The notification options only decide whether a message is shown, never the state itself
+            local function notifyStateChange(state)
+                local notify = moduleRecord().Notify
+                if not notify.Enabled then
+                    return
+                end
+                if (state and not notify.OnEnabled) or (not state and not notify.OnDisabled) then
+                    return
+                end
+
+                Library.Notify.Send({
+                    title = settings.title or 'Module',
+                    text = state and GG.Language.ModuleEnabled or GG.Language.ModuleDisabled,
+                    duration = notify.Duration,
+                    type = state and 'success' or 'info',
+                })
+
+                if notify.Sound and GG.NotificationSoundId then
+                    local sound = Instance.new('Sound')
+                    sound.SoundId = GG.NotificationSoundId
+                    sound.Volume = 0.5
+                    sound.Parent = game:GetService('SoundService')
+                    sound.Ended:Once(function()
+                        sound:Destroy()
+                    end)
+                    sound:Play()
+                end
+            end
+
             function ModuleManager:change_state(state: boolean)
                 self._state = state
 
@@ -3851,12 +4368,23 @@ function Library:create_ui()
                 Library._config._flags[settings.flag] = self._state
                 Config:save(game.GameId, Library._config)
 
+                if self._status_hook then
+                    self._status_hook()
+                end
+                if hasNotification then
+                    notifyStateChange(self._state)
+                end
+
                 settings.callback(self._state)
             end
             
             function ModuleManager:connect_keybind()
                 if not Library._config._keybinds[settings.flag] then
                     return
+                end
+
+                local function holdMode()
+                    return hasSetting and moduleRecord().ActivationMode == 'Hold'
                 end
 
                 Connections[settings.flag..'_keybind'] = UserInputService.InputBegan:Connect(function(input: InputObject, process: boolean)
@@ -3868,8 +4396,24 @@ function Library:create_ui()
                         return
                     end
                     
-                    self:change_state(not self._state)
+                    if holdMode() then
+                        if not self._state then
+                            self:change_state(true)
+                        end
+                    else
+                        self:change_state(not self._state)
+                    end
                 end)
+
+                -- Hold mode: the module follows the key, so it turns off when the key is released
+                if hasSetting then
+                    Connections:disconnect(settings.flag..'_keybind_end')
+                    Connections[settings.flag..'_keybind_end'] = UserInputService.InputEnded:Connect(function(input: InputObject)
+                        if holdMode() and self._state and tostring(input.KeyCode) == Library._config._keybinds[settings.flag] then
+                            self:change_state(false)
+                        end
+                    end)
+                end
             end
 
             function ModuleManager:scale_keybind(empty: boolean)
@@ -3892,13 +4436,332 @@ function Library:create_ui()
                 end
             end
 
-            if Library:flag_type(settings.flag, 'boolean') then
+            -- Keybind chosen in the settings panel (the same value the middle click binding uses)
+            local function setKeybind(keyCode)
+                Connections:disconnect(settings.flag .. '_keybind')
+                Connections:disconnect(settings.flag .. '_keybind_end')
+
+                if keyCode then
+                    Library._config._keybinds[settings.flag] = tostring(keyCode)
+                    TextLabel.Text = keyCode.Name
+                    ModuleManager:connect_keybind()
+                    ModuleManager:scale_keybind()
+                else
+                    Library._config._keybinds[settings.flag] = nil
+                    TextLabel.Text = 'None'
+                    ModuleManager:scale_keybind(true)
+                end
+                Config:save(game.GameId, Library._config)
+            end
+
+            -- "Show Button": a small draggable card that toggles the module from anywhere on screen
+            local floating = nil
+
+            local function destroyFloating()
+                if not floating then
+                    return
+                end
+                for _, connection in ipairs(floating.connections) do
+                    connection:Disconnect()
+                end
+                floating.frame:Destroy()
+                floating = nil
+            end
+
+            local function paintFloating()
+                if not floating then
+                    return
+                end
+                local on = ModuleManager._state
+                floating.button.Text = moduleRecord().ShowStatus and (on and 'ON' or 'OFF') or 'Toggle'
+                floating.button.BackgroundColor3 = on and CurrentTheme.Accent or CurrentTheme.Card
+                floating.button.TextColor3 = on and contrastText(CurrentTheme.Accent) or CurrentTheme.TextSecondary
+            end
+            ModuleManager._status_hook = paintFloating
+
+            local function createFloating()
+                Library._config._library = Library._config._library or {}
+                local positions = Library._config._library.positions
+                if type(positions) ~= 'table' then
+                    positions = {}
+                    Library._config._library.positions = positions
+                end
+
+                Library._floating_count = (Library._floating_count or 0) + 1
+                local index = Library._floating_count
+                local camera = workspace.CurrentCamera
+                local screen = camera and camera.ViewportSize or Vector2.new(1280, 720)
+
+                local frame = mk('Frame', {
+                    Name = 'FloatingButton',
+                    Active = true,
+                    Size = UDim2.fromOffset(150, 85),
+                    BackgroundColor3 = CurrentTheme.ModuleBackground,
+                    BackgroundTransparency = 0.1,
+                    BorderSizePixel = 0,
+                }, getFloatingGui())
+                mk('UICorner', { CornerRadius = UDim.new(0, 10) }, frame)
+                mk('UIStroke', { Color = CurrentTheme.Stroke, Transparency = 0.3, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, frame)
+
+                local saved = positions[settings.flag]
+                if type(saved) == 'table' and saved.XS and saved.XO and saved.YS and saved.YO then
+                    -- keep a saved position on screen
+                    local x = math.clamp(saved.XS * screen.X + saved.XO, 0, math.max(screen.X - 150, 0))
+                    local y = math.clamp(saved.YS * screen.Y + saved.YO, 0, math.max(screen.Y - 85, 0))
+                    frame.Position = UDim2.fromOffset(x, y)
+                else
+                    frame.Position = UDim2.new(0.5, -75 + (index - 1) * 12, 0.75, (index - 1) * 95)
+                end
+
+                mk('TextLabel', {
+                    Name = 'FloatingTitle',
+                    Position = UDim2.fromOffset(10, 8),
+                    Size = UDim2.new(1, -20, 0, 16),
+                    BackgroundTransparency = 1,
+                    Font = Enum.Font.GothamBold,
+                    TextSize = 12,
+                    TextColor3 = CurrentTheme.Accent,
+                    TextXAlignment = Enum.TextXAlignment.Left,
+                    TextTruncate = Enum.TextTruncate.AtEnd,
+                    Text = settings.title or 'Module',
+                }, frame)
+                local button = mk('TextButton', {
+                    Name = 'FloatingToggle',
+                    AutoButtonColor = false,
+                    Position = UDim2.fromOffset(10, 32),
+                    Size = UDim2.new(1, -20, 0, 40),
+                    BorderSizePixel = 0,
+                    Font = Enum.Font.GothamBold,
+                    TextSize = 14,
+                    Text = '',
+                }, frame)
+                mk('UICorner', { CornerRadius = UDim.new(0, 8) }, button)
+
+                local connections = {}
+                table.insert(connections, button.MouseButton1Click:Connect(function()
+                    ModuleManager:change_state(not ModuleManager._state)
+                end))
+
+                -- Drag by the card; the position is saved in the config file
+                local dragStart, startPosition = nil, nil
+                local function isPress(input)
+                    return input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch
+                end
+                table.insert(connections, frame.InputBegan:Connect(function(input)
+                    if isPress(input) then
+                        dragStart = input.Position
+                        startPosition = frame.Position
+                    end
+                end))
+                table.insert(connections, UserInputService.InputChanged:Connect(function(input)
+                    if dragStart and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                        local delta = input.Position - dragStart
+                        frame.Position = UDim2.new(
+                            startPosition.X.Scale, startPosition.X.Offset + delta.X,
+                            startPosition.Y.Scale, startPosition.Y.Offset + delta.Y
+                        )
+                    end
+                end))
+                table.insert(connections, UserInputService.InputEnded:Connect(function(input)
+                    if dragStart and isPress(input) then
+                        dragStart = nil
+                        positions[settings.flag] = {
+                            XS = frame.Position.X.Scale,
+                            XO = frame.Position.X.Offset,
+                            YS = frame.Position.Y.Scale,
+                            YO = frame.Position.Y.Offset,
+                        }
+                        Config:save(game.GameId, Library._config)
+                    end
+                end))
+
+                floating = { frame = frame, button = button, connections = connections }
+                paintFloating()
+            end
+
+            function ModuleManager:sync_floating()
+                local wanted = hasSetting and moduleRecord().ShowButton
+                if wanted and not floating then
+                    createFloating()
+                elseif not wanted and floating then
+                    destroyFloating()
+                end
+                paintFloating()
+            end
+
+            local function resetModuleSettings()
+                local record = moduleRecord()
+                record.ActivationMode = 'Toggle'
+                record.StartupState = 'Off'
+                record.ShowStatus = true
+                record.ShowButton = false
+                setKeybind(nil)
+                ModuleManager:sync_floating()
+                Config:save(game.GameId, Library._config)
+            end
+
+            local function openSettingsPanel()
+                openModulePanel({
+                    Title = settings.title or 'Module',
+                    Subtitle = 'Settings',
+                    Rows = function()
+                        local record = moduleRecord()
+                        return {
+                            {
+                                Type = 'Keybind', Name = 'Keybind',
+                                Get = function()
+                                    local key = Library._config._keybinds[settings.flag]
+                                    return key and (string.gsub(tostring(key), 'Enum.KeyCode.', '')) or nil
+                                end,
+                                Set = setKeybind,
+                            },
+                            {
+                                Type = 'Segmented', Name = 'Activation Mode', Options = { 'Toggle', 'Hold' },
+                                Get = function() return record.ActivationMode end,
+                                Set = function(value) record.ActivationMode = value; Config:save(game.GameId, Library._config) end,
+                            },
+                            {
+                                Type = 'Segmented', Name = 'Startup State', Options = { 'On', 'Off' },
+                                Get = function() return record.StartupState end,
+                                Set = function(value) record.StartupState = value; Config:save(game.GameId, Library._config) end,
+                            },
+                            {
+                                Type = 'Toggle', Name = 'Show Status',
+                                Get = function() return record.ShowStatus end,
+                                Set = function(value) record.ShowStatus = value; paintFloating(); Config:save(game.GameId, Library._config) end,
+                            },
+                            {
+                                Type = 'Toggle', Name = 'Show Button',
+                                Get = function() return record.ShowButton end,
+                                Set = function(value) record.ShowButton = value; ModuleManager:sync_floating(); Config:save(game.GameId, Library._config) end,
+                            },
+                            { Type = 'Button', Name = 'Reset Settings', Action = resetModuleSettings },
+                        }
+                    end,
+                })
+            end
+
+            local function openNotificationPanel()
+                openModulePanel({
+                    Title = settings.title or 'Module',
+                    Subtitle = 'Notifications',
+                    Rows = function()
+                        local notify = moduleRecord().Notify
+                        local function save() Config:save(game.GameId, Library._config) end
+                        return {
+                            { Type = 'Toggle', Name = 'Enabled', Get = function() return notify.Enabled end, Set = function(value) notify.Enabled = value; save() end },
+                            { Type = 'Toggle', Name = 'On Enabled', Get = function() return notify.OnEnabled end, Set = function(value) notify.OnEnabled = value; save() end },
+                            { Type = 'Toggle', Name = 'On Disabled', Get = function() return notify.OnDisabled end, Set = function(value) notify.OnDisabled = value; save() end },
+                            { Type = 'Toggle', Name = 'Sound', Get = function() return notify.Sound end, Set = function(value) notify.Sound = value; save() end },
+                            { Type = 'Slider', Name = 'Duration', Min = 1, Max = 10, Step = 0.5, Get = function() return notify.Duration end, Set = function(value) notify.Duration = value; save() end },
+                            {
+                                Type = 'Button', Name = 'Reset Notifications',
+                                Action = function()
+                                    notify.Enabled, notify.OnEnabled, notify.OnDisabled, notify.Sound, notify.Duration = true, true, true, false, 3
+                                    save()
+                                end,
+                            },
+                        }
+                    end,
+                })
+            end
+
+            -- Gear and bell sit left of the toggle in the bottom row of the module header
+            local function makeHeaderButton(name, iconName, glyph, x, onClick)
+                local button = mk('TextButton', {
+                    Name = name,
+                    Text = '',
+                    AutoButtonColor = false,
+                    BackgroundTransparency = 1,
+                    Position = UDim2.fromOffset(x, 68),
+                    Size = UDim2.fromOffset(18, 18),
+                    BorderSizePixel = 0,
+                    ZIndex = 3,
+                }, Header)
+                local image = mk('ImageLabel', {
+                    Name = name .. 'Icon',
+                    AnchorPoint = Vector2.new(0.5, 0.5),
+                    Position = UDim2.fromScale(0.5, 0.5),
+                    Size = UDim2.fromOffset(14, 14),
+                    BackgroundTransparency = 1,
+                    ImageTransparency = 0.3,
+                    ZIndex = 4,
+                }, button)
+                local fallback = nil
+                if not applyIcon(image, iconName, CurrentTheme.TextSecondary) then
+                    image.Visible = false
+                    fallback = mk('TextLabel', {
+                        Name = name .. 'Glyph',
+                        Size = UDim2.fromScale(1, 1),
+                        BackgroundTransparency = 1,
+                        Text = glyph,
+                        TextSize = 12,
+                        TextColor3 = CurrentTheme.TextSecondary,
+                        ZIndex = 4,
+                    }, button)
+                end
+
+                button.MouseEnter:Connect(function()
+                    TweenService:Create(image, TweenInfo.new(0.2), { ImageTransparency = 0 }):Play()
+                end)
+                button.MouseLeave:Connect(function()
+                    TweenService:Create(image, TweenInfo.new(0.2), { ImageTransparency = 0.3 }):Play()
+                end)
+                button.MouseButton1Click:Connect(onClick)
+
+                local function recolor()
+                    image.ImageColor3 = CurrentTheme.TextSecondary
+                    if fallback then
+                        fallback.TextColor3 = CurrentTheme.TextSecondary
+                    end
+                end
+                recolor()
+                table.insert(Library._theme_hooks, recolor)
+                table.insert(extraHooks, recolor)
+            end
+
+            local nextButtonX = 175
+            if hasNotification then
+                makeHeaderButton('NotificationButton', 'bell', '\240\159\148\148', nextButtonX, openNotificationPanel)
+                nextButtonX -= 20
+            end
+            if hasSetting then
+                makeHeaderButton('SettingsButton', 'settings', '\226\154\153', nextButtonX, openSettingsPanel)
+            end
+
+            -- Everything this module added outside its own frame
+            function ModuleManager._cleanup_extras()
+                destroyFloating()
+                for _, hook in ipairs(extraHooks) do
+                    local position = table.find(Library._theme_hooks, hook)
+                    if position then
+                        table.remove(Library._theme_hooks, position)
+                    end
+                end
+                table.clear(extraHooks)
+                closeModulePanel()
+            end
+
+            -- Startup state: a module with a settings button starts as its "Startup State" says;
+            -- other modules keep the saved state as before
+            local startsOn
+            if hasSetting then
+                startsOn = moduleRecord().StartupState == 'On'
+            else
+                startsOn = Library:flag_type(settings.flag, 'boolean')
+            end
+
+            if startsOn then
                 ModuleManager._state = true
                 settings.callback(ModuleManager._state)
 
                 Toggle.BackgroundColor3 = CurrentTheme.Accent
                 Circle.BackgroundColor3 = CurrentTheme.Accent
                 Circle.Position = UDim2.fromScale(0.53, 0.5)
+            end
+
+            if hasSetting then
+                ModuleManager:sync_floating()
             end
 
             if Library._config._keybinds[settings.flag] then
@@ -4557,23 +5420,24 @@ function Library:create_ui()
                 local Fill = Instance.new('Frame')
                 Fill.BorderColor3 = Color3.fromRGB(0, 0, 0)
                 Fill.AnchorPoint = Vector2.new(0, 0.5)
-                Fill.BackgroundTransparency = 0.5
+                Fill.BackgroundTransparency = 0
                 Fill.Position = UDim2.new(0, 0, 0.5, 0)
-                Fill.Name = 'Fill'
+                Fill.Name = 'SliderFill'
                 Fill.Size = UDim2.new(0, 103, 0, 4)
                 Fill.BorderSizePixel = 0
-                Fill.BackgroundColor3 = CurrentTheme.Accent
+                Fill.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
                 Fill.Parent = Drag
                 
                 local UICorner = Instance.new('UICorner')
                 UICorner.CornerRadius = UDim.new(0, 3)
                 UICorner.Parent = Fill
                 
+                -- left_color is the color on the left of the fill (default white); the right end of the fill moves
+                -- towards max_color (default black) and reaches it when the slider is dragged to the maximum
+                local leftColor = settings.left_color or Color3.fromRGB(255, 255, 255)
+                local maxColor = settings.max_color or Color3.fromRGB(0, 0, 0)
                 local UIGradient = Instance.new('UIGradient')
-                UIGradient.Color = ColorSequence.new{
-                    ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
-                    ColorSequenceKeypoint.new(1, Color3.fromRGB(79, 79, 79))
-                }
+                UIGradient.Color = ColorSequence.new(leftColor, leftColor)
                 UIGradient.Parent = Fill
                 
                 local Circle = Instance.new('Frame')
@@ -4617,6 +5481,7 @@ function Library:create_ui()
                     end
 
                     percentage = (percentage - settings.minimum_value) / (settings.maximum_value - settings.minimum_value)
+                    UIGradient.Color = ColorSequence.new(leftColor, leftColor:Lerp(maxColor, math.clamp(percentage, 0, 1)))
                     
                     local slider_size = math.clamp(percentage, 0.02, 1) * Drag.Size.X.Offset
                     local number_threshold = math.clamp(rounded_number, settings.minimum_value, settings.maximum_value)
@@ -4746,17 +5611,25 @@ function Library:create_ui()
                 local Fill = Instance.new('Frame')
                 Fill.BorderColor3 = Color3.fromRGB(0, 0, 0)
                 Fill.AnchorPoint = Vector2.new(0, 0.5)
-                Fill.BackgroundTransparency = 0.5
+                Fill.BackgroundTransparency = 0
                 Fill.Position = UDim2.new(0, 0, 0.5, 0)
-                Fill.Name = 'Fill'
+                Fill.Name = 'SliderFill'
                 Fill.Size = UDim2.new(0, 0, 0, 4)
                 Fill.BorderSizePixel = 0
-                Fill.BackgroundColor3 = CurrentTheme.Accent
+                Fill.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
                 Fill.Parent = Drag
 
                 local UICornerFill = Instance.new('UICorner')
                 UICornerFill.CornerRadius = UDim.new(0, 3)
                 UICornerFill.Parent = Fill
+
+                -- left_color on the left of the fill (default white); the right end moves towards max_color
+                -- (default black) and reaches it when the right thumb is at the maximum
+                local leftColor = settings.left_color or Color3.fromRGB(255, 255, 255)
+                local maxColor = settings.max_color or Color3.fromRGB(0, 0, 0)
+                local FillGradient = Instance.new('UIGradient')
+                FillGradient.Color = ColorSequence.new(leftColor, leftColor)
+                FillGradient.Parent = Fill
 
                 local MinThumb = Instance.new('Frame')
                 MinThumb.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -4804,6 +5677,7 @@ function Library:create_ui()
                 function RangeSliderManager:update_positions(animate)
                     local min_percent = math.clamp((self.min_value - min_val) / (max_val - min_val), 0, 1)
                     local max_percent = math.clamp((self.max_value - min_val) / (max_val - min_val), 0, 1)
+                    FillGradient.Color = ColorSequence.new(leftColor, leftColor:Lerp(maxColor, max_percent))
 
                     if animate then
                         TweenService:Create(MinThumb, TweenInfo.new(0.2, Enum.EasingStyle.Quint), {Position = UDim2.new(min_percent, 0, 0.5, 0)}):Play()
@@ -5531,9 +6405,10 @@ function Library:create_ui()
             end
 
             -- ===================== Color Picker =====================
-            -- A swatch row that opens a popup: saturation/value square, hue bar,
-            -- hex box with copy button, preset colors and Cancel / Confirm.
-            -- settings: { title, flag, default = Color3, callback = function(color) end, notify = true }
+            -- A row with the name, a chevron and a swatch. Clicking it expands the color picker under the row
+            -- (UI v2 design): a saturation/value area and a hue bar. The color applies while you drag
+            -- and is saved when you let go. Only one picker is open at a time.
+            -- settings: { title, flag, default = Color3, callback = function(color) end }
             function ModuleManager:create_colorpicker(settings: any)
                 LayoutOrderModule = LayoutOrderModule + 1
 
@@ -5554,443 +6429,236 @@ function Library:create_ui()
                     end
                 end
 
-                local row = mk("Frame", {
+                local hue, saturation, value = current:ToHSV()
+                local ColorManager = {}
+
+                local Row = mk("Frame", {
                     Name = "ColorPickerRow",
                     Size = UDim2.new(0, 207, 0, 22),
+                    AutomaticSize = Enum.AutomaticSize.Y,
                     BackgroundTransparency = 1,
                     LayoutOrder = LayoutOrderModule,
                 }, Options)
+                mk("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder }, Row)
 
-                local title = mk("TextLabel", {
+                local Header = mk("TextButton", {
+                    Name = "ColorHeader",
+                    Text = "",
+                    AutoButtonColor = false,
+                    BackgroundTransparency = 1,
+                    Size = UDim2.new(1, 0, 0, 22),
+                    LayoutOrder = 1,
+                }, Row)
+
+                local Title = mk("TextLabel", {
                     Name = "ColorTitle",
-                    Size = UDim2.new(1, -44, 1, 0),
+                    Size = UDim2.new(1, -86, 1, 0),
                     BackgroundTransparency = 1,
                     Font = Enum.Font.GothamSemibold,
                     TextSize = 11,
                     TextColor3 = CurrentTheme.TextPrimary,
                     TextXAlignment = Enum.TextXAlignment.Left,
                     Text = settings.title or "Color",
-                }, row)
+                }, Header)
 
-                local swatch = mk("TextButton", {
+                local Chevron = mk("TextLabel", {
+                    Name = "Value",
+                    AnchorPoint = Vector2.new(1, 0.5),
+                    Position = UDim2.new(1, -64, 0.5, 0),
+                    Size = UDim2.fromOffset(14, 14),
+                    BackgroundTransparency = 1,
+                    Font = Enum.Font.GothamBold,
+                    TextSize = 10,
+                    TextColor3 = CurrentTheme.TextSecondary,
+                    Text = "v",
+                }, Header)
+
+                local Swatch = mk("Frame", {
                     Name = "Swatch",
-                    Text = "",
-                    AutoButtonColor = false,
                     AnchorPoint = Vector2.new(1, 0.5),
                     Position = UDim2.new(1, 0, 0.5, 0),
-                    Size = UDim2.fromOffset(36, 18),
+                    Size = UDim2.fromOffset(56, 18),
                     BackgroundColor3 = current,
                     BorderSizePixel = 0,
-                }, row)
-                mk("UICorner", { CornerRadius = UDim.new(0, 5) }, swatch)
-                local swatchStroke = mk("UIStroke", {
+                }, Header)
+                mk("UICorner", { CornerRadius = UDim.new(0, 5) }, Swatch)
+                local SwatchStroke = mk("UIStroke", {
                     Color = CurrentTheme.Stroke,
                     Transparency = 0.3,
                     ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-                }, swatch)
+                }, Swatch)
 
-                -- Apply a color: update the swatch, save it and fire the callback
-                local function commit(color)
+                local Body = mk("Frame", {
+                    Name = "ColorBody",
+                    Size = UDim2.new(1, 0, 0, 0),
+                    AutomaticSize = Enum.AutomaticSize.Y,
+                    BackgroundTransparency = 1,
+                    Visible = false,
+                    LayoutOrder = 2,
+                }, Row)
+                mk("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder }, Body)
+
+                -- Saturation / value area
+                local Area = mk("Frame", {
+                    Name = "ColorArea",
+                    Size = UDim2.new(1, 0, 0, 110),
+                    BackgroundColor3 = Color3.fromHSV(hue, 1, 1),
+                    BorderSizePixel = 0,
+                    LayoutOrder = 1,
+                }, Body)
+                mk("UICorner", { CornerRadius = UDim.new(0, 8) }, Area)
+
+                local WhiteLayer = mk("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.new(1, 1, 1), BorderSizePixel = 0 }, Area)
+                mk("UICorner", { CornerRadius = UDim.new(0, 8) }, WhiteLayer)
+                mk("UIGradient", {
+                    Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(1, 1) }),
+                }, WhiteLayer)
+
+                local BlackLayer = mk("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = Color3.new(0, 0, 0), BorderSizePixel = 0 }, Area)
+                mk("UICorner", { CornerRadius = UDim.new(0, 8) }, BlackLayer)
+                mk("UIGradient", {
+                    Rotation = 90,
+                    Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(1, 0) }),
+                }, BlackLayer)
+
+                local AreaKnob = mk("Frame", {
+                    AnchorPoint = Vector2.new(0.5, 0.5),
+                    Size = UDim2.fromOffset(12, 12),
+                    BackgroundColor3 = Color3.new(1, 1, 1),
+                    BorderSizePixel = 0,
+                    ZIndex = 3,
+                }, Area)
+                mk("UICorner", { CornerRadius = UDim.new(0, 6) }, AreaKnob)
+                mk("UIStroke", { Color = Color3.new(0, 0, 0), Thickness = 1.5 }, AreaKnob)
+
+                -- Hue bar
+                local HueBar = mk("Frame", {
+                    Name = "ColorHue",
+                    Size = UDim2.new(1, 0, 0, 14),
+                    BackgroundColor3 = Color3.new(1, 1, 1),
+                    BorderSizePixel = 0,
+                    LayoutOrder = 2,
+                }, Body)
+                mk("UICorner", { CornerRadius = UDim.new(0, 7) }, HueBar)
+                mk("UIGradient", {
+                    Color = ColorSequence.new({
+                        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)),
+                        ColorSequenceKeypoint.new(1 / 6, Color3.fromRGB(255, 255, 0)),
+                        ColorSequenceKeypoint.new(2 / 6, Color3.fromRGB(0, 255, 0)),
+                        ColorSequenceKeypoint.new(3 / 6, Color3.fromRGB(0, 255, 255)),
+                        ColorSequenceKeypoint.new(4 / 6, Color3.fromRGB(0, 0, 255)),
+                        ColorSequenceKeypoint.new(5 / 6, Color3.fromRGB(255, 0, 255)),
+                        ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0)),
+                    }),
+                }, HueBar)
+
+                local HueKnob = mk("Frame", {
+                    AnchorPoint = Vector2.new(0.5, 0.5),
+                    Size = UDim2.fromOffset(6, 20),
+                    BackgroundColor3 = Color3.new(1, 1, 1),
+                    BorderSizePixel = 0,
+                    ZIndex = 3,
+                }, HueBar)
+                mk("UICorner", { CornerRadius = UDim.new(0, 3) }, HueKnob)
+                mk("UIStroke", { Color = Color3.new(0, 0, 0), Thickness = 1 }, HueKnob)
+
+                local function render()
+                    Area.BackgroundColor3 = Color3.fromHSV(hue, 1, 1)
+                    AreaKnob.Position = UDim2.fromScale(saturation, 1 - value)
+                    HueKnob.Position = UDim2.fromScale(hue, 0.5)
+                end
+                render()
+
+                -- Remember the color, show it on the swatch and tell the script. The file is written when the drag ends.
+                local function apply(color, saveNow)
                     current = color
-                    swatch.BackgroundColor3 = color
+                    Swatch.BackgroundColor3 = color
                     Library._config._flags[settings.flag] = { R = color.R, G = color.G, B = color.B }
-                    Config:save(game.GameId, Library._config)
+                    if saveNow then
+                        Config:save(game.GameId, Library._config)
+                    end
                     if settings.callback then
                         settings.callback(color)
                     end
                 end
 
-                -- Keep the row in sync with theme changes (called by Library_SetTheme)
-                table.insert(Library._color_popups, function()
-                    title.TextColor3 = CurrentTheme.TextPrimary
-                    swatchStroke.Color = CurrentTheme.Stroke
-                end)
-
-                local function open_popup()
-                    -- Only one popup can be open at a time
-                    if Library._close_picker then
-                        Library._close_picker()
-                    end
-
-                    local T = CurrentTheme
-                    local h, sat, val = current:ToHSV()
-                    local working = current
-                    local dragMode = nil
-                    local moveKey = "picker_move_" .. tostring(settings.flag)
-                    local endKey = "picker_end_" .. tostring(settings.flag)
-                    local viewport = workspace.CurrentCamera.ViewportSize
-                    local accentB = T.Accent:Lerp(Color3.fromRGB(139, 92, 246), 0.55)
-
-                    local Popup = mk("Frame", {
-                        Name = "ColorPickerPopup",
-                        AnchorPoint = Vector2.new(0.5, 0.5),
-                        Position = UDim2.new(0.5, 0, 0.5, 0),
-                        Size = UDim2.fromOffset(300, 288),
-                        BackgroundColor3 = T.ModuleBackground,
-                        BorderSizePixel = 0,
-                        Active = true,
-                        ZIndex = 50,
-                    }, Library._ui or CoreGui)
-                    mk("UICorner", { CornerRadius = UDim.new(0, 14) }, Popup)
-                    mk("UIStroke", { Color = T.Stroke, Thickness = 1.5, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, Popup)
-                    -- Shrink on small screens
-                    mk("UIScale", { Scale = math.clamp((viewport.X - 24) / 320, 0.55, 1) }, Popup)
-
-                    -- Header: palette icon + title + close button
-                    mk("TextLabel", {
-                        Name = "PickerIcon",
-                        Text = "\240\159\142\168",
-                        TextSize = 16,
-                        Position = UDim2.fromOffset(15, 12),
-                        Size = UDim2.fromOffset(22, 24),
-                        BackgroundTransparency = 1,
-                    }, Popup)
-                    mk("TextLabel", {
-                        Name = "PickerTitle",
-                        Font = Enum.Font.GothamBold,
-                        TextSize = 15,
-                        TextColor3 = T.TextPrimary,
-                        Text = "Color Picker",
-                        Position = UDim2.fromOffset(42, 12),
-                        Size = UDim2.fromOffset(200, 24),
-                        BackgroundTransparency = 1,
-                        TextXAlignment = Enum.TextXAlignment.Left,
-                    }, Popup)
-
-                    local CloseButton = mk("TextButton", {
-                        Text = "X",
-                        Font = Enum.Font.GothamBold,
-                        TextSize = 12,
-                        TextColor3 = T.TextSecondary,
-                        AutoButtonColor = false,
-                        BackgroundColor3 = T.Card,
-                        Position = UDim2.fromOffset(262, 8),
-                        Size = UDim2.fromOffset(26, 26),
-                        BorderSizePixel = 0,
-                    }, Popup)
-                    mk("UICorner", { CornerRadius = UDim.new(0, 6) }, CloseButton)
-
-                    -- Saturation / value square
-                    local SV = mk("Frame", {
-                        Name = "SV",
-                        Position = UDim2.fromOffset(15, 44),
-                        Size = UDim2.fromOffset(270, 124),
-                        BackgroundColor3 = Color3.fromHSV(h, 1, 1),
-                        BorderSizePixel = 0,
-                        Active = true,
-                    }, Popup)
-                    mk("UICorner", { CornerRadius = UDim.new(0, 10) }, SV)
-
-                    -- White fades out to the right
-                    local WhiteLayer = mk("Frame", {
-                        Size = UDim2.fromScale(1, 1),
-                        BackgroundColor3 = Color3.new(1, 1, 1),
-                        BorderSizePixel = 0,
-                    }, SV)
-                    mk("UICorner", { CornerRadius = UDim.new(0, 10) }, WhiteLayer)
-                    mk("UIGradient", {
-                        Transparency = NumberSequence.new({
-                            NumberSequenceKeypoint.new(0, 0),
-                            NumberSequenceKeypoint.new(1, 1),
-                        }),
-                    }, WhiteLayer)
-
-                    -- Black fades in towards the bottom
-                    local BlackLayer = mk("Frame", {
-                        Size = UDim2.fromScale(1, 1),
-                        BackgroundColor3 = Color3.new(0, 0, 0),
-                        BorderSizePixel = 0,
-                    }, SV)
-                    mk("UICorner", { CornerRadius = UDim.new(0, 10) }, BlackLayer)
-                    mk("UIGradient", {
-                        Rotation = 90,
-                        Transparency = NumberSequence.new({
-                            NumberSequenceKeypoint.new(0, 1),
-                            NumberSequenceKeypoint.new(1, 0),
-                        }),
-                    }, BlackLayer)
-
-                    local SVKnob = mk("Frame", {
-                        AnchorPoint = Vector2.new(0.5, 0.5),
-                        Size = UDim2.fromOffset(14, 14),
-                        BackgroundColor3 = working,
-                        BorderSizePixel = 0,
-                        ZIndex = 3,
-                    }, SV)
-                    mk("UICorner", { CornerRadius = UDim.new(1, 0) }, SVKnob)
-                    mk("UIStroke", { Color = Color3.new(1, 1, 1), Thickness = 2 }, SVKnob)
-
-                    -- Hue bar
-                    local Hue = mk("Frame", {
-                        Name = "Hue",
-                        Position = UDim2.fromOffset(15, 182),
-                        Size = UDim2.fromOffset(270, 16),
-                        BackgroundColor3 = Color3.new(1, 1, 1),
-                        BorderSizePixel = 0,
-                        Active = true,
-                    }, Popup)
-                    mk("UICorner", { CornerRadius = UDim.new(1, 0) }, Hue)
-                    mk("UIGradient", {
-                        Color = ColorSequence.new({
-                            ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)),
-                            ColorSequenceKeypoint.new(1 / 6, Color3.fromRGB(255, 255, 0)),
-                            ColorSequenceKeypoint.new(2 / 6, Color3.fromRGB(0, 255, 0)),
-                            ColorSequenceKeypoint.new(3 / 6, Color3.fromRGB(0, 255, 255)),
-                            ColorSequenceKeypoint.new(4 / 6, Color3.fromRGB(0, 0, 255)),
-                            ColorSequenceKeypoint.new(5 / 6, Color3.fromRGB(255, 0, 255)),
-                            ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 0, 0)),
-                        }),
-                    }, Hue)
-
-                    local HueKnob = mk("Frame", {
-                        AnchorPoint = Vector2.new(0.5, 0.5),
-                        Size = UDim2.fromOffset(10, 26),
-                        BackgroundColor3 = Color3.new(1, 1, 1),
-                        BorderSizePixel = 0,
-                        ZIndex = 3,
-                    }, Hue)
-                    mk("UICorner", { CornerRadius = UDim.new(0, 4) }, HueKnob)
-                    mk("UIStroke", { Color = T.Stroke, Thickness = 1 }, HueKnob)
-
-                    -- Hex box + copy button
-                    local HexBox = mk("TextBox", {
-                        Name = "HexBox",
-                        Font = Enum.Font.Gotham,
-                        TextSize = 13,
-                        TextColor3 = T.TextPrimary,
-                        PlaceholderText = "#RRGGBB",
-                        PlaceholderColor3 = T.TextSecondary,
-                        Text = "",
-                        ClearTextOnFocus = false,
-                        TextXAlignment = Enum.TextXAlignment.Left,
-                        BackgroundColor3 = T.Card,
-                        Position = UDim2.fromOffset(15, 212),
-                        Size = UDim2.fromOffset(122, 28),
-                        BorderSizePixel = 0,
-                    }, Popup)
-                    mk("UICorner", { CornerRadius = UDim.new(0, 6) }, HexBox)
-                    mk("UIPadding", { PaddingLeft = UDim.new(0, 8) }, HexBox)
-
-                    local CopyButton = mk("TextButton", {
-                        Text = "",
-                        AutoButtonColor = false,
-                        BackgroundColor3 = T.Card,
-                        Position = UDim2.fromOffset(141, 212),
-                        Size = UDim2.fromOffset(30, 28),
-                        BorderSizePixel = 0,
-                    }, Popup)
-                    mk("UICorner", { CornerRadius = UDim.new(0, 6) }, CopyButton)
-
-                    -- Copy icon: two overlapping squares
-                    local CopyBack = mk("Frame", {
-                        Position = UDim2.fromOffset(10, 6),
-                        Size = UDim2.fromOffset(10, 10),
-                        BackgroundTransparency = 1,
-                        BorderSizePixel = 0,
-                    }, CopyButton)
-                    mk("UICorner", { CornerRadius = UDim.new(0, 2) }, CopyBack)
-                    mk("UIStroke", { Color = T.TextSecondary, Thickness = 1.2 }, CopyBack)
-                    local CopyFront = mk("Frame", {
-                        Position = UDim2.fromOffset(7, 10),
-                        Size = UDim2.fromOffset(10, 10),
-                        BackgroundColor3 = T.Card,
-                        BorderSizePixel = 0,
-                    }, CopyButton)
-                    mk("UICorner", { CornerRadius = UDim.new(0, 2) }, CopyFront)
-                    mk("UIStroke", { Color = T.TextSecondary, Thickness = 1.2 }, CopyFront)
-
-                    mk("Frame", {
-                        Position = UDim2.fromOffset(180, 215),
-                        Size = UDim2.fromOffset(1, 22),
-                        BackgroundColor3 = T.Stroke,
-                        BorderSizePixel = 0,
-                    }, Popup)
-
-                    -- Cancel / Confirm
-                    local Cancel = mk("TextButton", {
-                        Text = "Cancel",
-                        Font = Enum.Font.GothamSemibold,
-                        TextSize = 12,
-                        TextColor3 = T.TextPrimary,
-                        AutoButtonColor = false,
-                        BackgroundColor3 = T.Card,
-                        Position = UDim2.fromOffset(100, 251),
-                        Size = UDim2.fromOffset(86, 26),
-                        BorderSizePixel = 0,
-                    }, Popup)
-                    mk("UICorner", { CornerRadius = UDim.new(0, 6) }, Cancel)
-
-                    -- The gradient lives on its own frame: a UIGradient on the button itself would also
-                    -- tint the text (white text x accent gradient = invisible text)
-                    local Confirm = mk("TextButton", {
-                        Name = "Confirm",
-                        Text = "",
-                        AutoButtonColor = false,
-                        BackgroundTransparency = 1,
-                        Position = UDim2.fromOffset(196, 251),
-                        Size = UDim2.fromOffset(86, 26),
-                        BorderSizePixel = 0,
-                    }, Popup)
-                    local ConfirmFill = mk("Frame", {
-                        Name = "ConfirmFill",
-                        Size = UDim2.fromScale(1, 1),
-                        BackgroundColor3 = Color3.new(1, 1, 1),
-                        BorderSizePixel = 0,
-                    }, Confirm)
-                    mk("UICorner", { CornerRadius = UDim.new(0, 6) }, ConfirmFill)
-                    mk("UIGradient", { Color = ColorSequence.new(T.Accent, accentB) }, ConfirmFill)
-                    mk("TextLabel", {
-                        Name = "ConfirmText",
-                        Size = UDim2.fromScale(1, 1),
-                        BackgroundTransparency = 1,
-                        Font = Enum.Font.GothamBold,
-                        TextSize = 12,
-                        TextColor3 = contrastText(T.Accent:Lerp(accentB, 0.5)),
-                        Text = "Confirm",
-                    }, Confirm)
-
-                    ---------------------------------------------------
-                    -- Logic
-                    ---------------------------------------------------
-                    -- Redraw knobs, hue tint and hex text. `exact` keeps an exact color (typed hex / presets)
-                    local function refresh(exact)
-                        working = exact or Color3.fromHSV(h, sat, val)
-                        SV.BackgroundColor3 = Color3.fromHSV(h, 1, 1)
-                        SVKnob.Position = UDim2.fromScale(sat, 1 - val)
-                        SVKnob.BackgroundColor3 = working
-                        HueKnob.Position = UDim2.new(h, 0, 0.5, 0)
-                        HexBox.Text = "#" .. string.upper(working:ToHex())
-                    end
-
-                    local function setColor(color)
-                        h, sat, val = color:ToHSV()
-                        refresh(color)
-                    end
-
-                    local function close()
-                        Connections:disconnect(moveKey)
-                        Connections:disconnect(endKey)
-                        if Library._close_picker == close then
-                            Library._close_picker = nil
-                        end
-                        Popup:Destroy()
-                    end
-                    Library._close_picker = close
-
-                    -- Preset colors
-                    local presets = { "6366F1", "EC4899", "EF4444", "A8A3C7", "D1D5DB" }
-                    for index, hex in ipairs(presets) do
-                        local presetColor = Color3.fromHex(hex)
-                        local Dot = mk("TextButton", {
-                            Text = "",
-                            AutoButtonColor = false,
-                            Position = UDim2.fromOffset(194 + (index - 1) * 19, 218),
-                            Size = UDim2.fromOffset(14, 14),
-                            BackgroundColor3 = presetColor,
-                            BorderSizePixel = 0,
-                        }, Popup)
-                        mk("UICorner", { CornerRadius = UDim.new(1, 0) }, Dot)
-                        mk("UIStroke", { Color = T.Stroke, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, Dot)
-                        Dot.MouseButton1Click:Connect(function()
-                            setColor(presetColor)
-                        end)
-                    end
-
-                    -- Dragging the square / hue bar (mouse and touch)
-                    local function updateDrag(position)
-                        if dragMode == "sv" then
-                            sat = math.clamp((position.X - SV.AbsolutePosition.X) / SV.AbsoluteSize.X, 0, 1)
-                            val = 1 - math.clamp((position.Y - SV.AbsolutePosition.Y) / SV.AbsoluteSize.Y, 0, 1)
-                            refresh()
-                        elseif dragMode == "hue" then
-                            h = math.clamp((position.X - Hue.AbsolutePosition.X) / Hue.AbsoluteSize.X, 0, 1)
-                            refresh()
-                        end
-                    end
-
-                    local function isPress(input)
-                        return input.UserInputType == Enum.UserInputType.MouseButton1
-                            or input.UserInputType == Enum.UserInputType.Touch
-                    end
-
-                    SV.InputBegan:Connect(function(input)
-                        if isPress(input) then
-                            dragMode = "sv"
-                            updateDrag(input.Position)
-                        end
-                    end)
-
-                    Hue.InputBegan:Connect(function(input)
-                        if isPress(input) then
-                            dragMode = "hue"
-                            updateDrag(input.Position)
-                        end
-                    end)
-
-                    Connections[moveKey] = UserInputService.InputChanged:Connect(function(input)
-                        if not dragMode then return end
-                        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-                            updateDrag(input.Position)
-                        end
-                    end)
-
-                    Connections[endKey] = UserInputService.InputEnded:Connect(function(input)
-                        if isPress(input) then
-                            dragMode = nil
-                        end
-                    end)
-
-                    -- Typed hex value
-                    HexBox.FocusLost:Connect(function()
-                        local text = (string.gsub(HexBox.Text, "[#%s]", ""))
-                        local ok, parsed = pcall(Color3.fromHex, "#" .. text)
-                        if ok and parsed then
-                            setColor(parsed)
-                        else
-                            refresh(working) -- invalid input, restore the previous text
-                        end
-                    end)
-
-                    CopyButton.MouseButton1Click:Connect(function()
-                        local hexText = "#" .. string.upper(working:ToHex())
-                        if setclipboard then
-                            pcall(setclipboard, hexText)
-                            Library.Notify.Info("Copied", hexText, 2)
-                        else
-                            Library.Notify.Warn("Copy not supported", "Your executor has no setclipboard", 3)
-                        end
-                    end)
-
-                    CloseButton.MouseButton1Click:Connect(close)
-                    Cancel.MouseButton1Click:Connect(close)
-
-                    Confirm.MouseButton1Click:Connect(function()
-                        commit(working)
-                        if settings.notify ~= false then
-                            Library.Notify.Success("Color updated!", nil, 2)
-                        end
-                        close()
-                    end)
-
-                    refresh(current)
+                local dragMode = nil
+                local function isPress(input)
+                    return input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch
                 end
 
-                swatch.MouseButton1Click:Connect(open_popup)
+                local function update(position)
+                    if dragMode == "area" then
+                        saturation = math.clamp((position.X - Area.AbsolutePosition.X) / math.max(Area.AbsoluteSize.X, 1), 0, 1)
+                        value = 1 - math.clamp((position.Y - Area.AbsolutePosition.Y) / math.max(Area.AbsoluteSize.Y, 1), 0, 1)
+                    elseif dragMode == "hue" then
+                        hue = math.clamp((position.X - HueBar.AbsolutePosition.X) / math.max(HueBar.AbsoluteSize.X, 1), 0, 1)
+                    else
+                        return
+                    end
+                    render()
+                    apply(Color3.fromHSV(hue, saturation, value), false)
+                end
 
-                title.InputBegan:Connect(function(input)
-                    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-                        open_popup()
+                Area.InputBegan:Connect(function(input)
+                    if isPress(input) then
+                        dragMode = "area"
+                        update(input.Position)
+                    end
+                end)
+                HueBar.InputBegan:Connect(function(input)
+                    if isPress(input) then
+                        dragMode = "hue"
+                        update(input.Position)
+                    end
+                end)
+                trackedConnect(UserInputService.InputChanged, function(input)
+                    if dragMode and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                        update(input.Position)
+                    end
+                end)
+                trackedConnect(UserInputService.InputEnded, function(input)
+                    if dragMode and isPress(input) then
+                        dragMode = nil
+                        Config:save(game.GameId, Library._config)
                     end
                 end)
 
-                return {
-                    Set = function(_, color)
-                        commit(color)
-                    end,
-                    Get = function()
-                        return current
+                local function setOpen(open)
+                    Body.Visible = open
+                    Chevron.Text = open and "^" or "v"
+                end
+                local function closeSelf()
+                    setOpen(false)
+                end
+
+                Header.MouseButton1Click:Connect(function()
+                    local opening = not Body.Visible
+                    if opening and Library._close_picker and Library._close_picker ~= closeSelf then
+                        Library._close_picker()
                     end
-                }
+                    setOpen(opening)
+                    Library._close_picker = opening and closeSelf or nil
+                end)
+
+                -- Keep the row in sync with theme changes (called by Library_SetTheme)
+                table.insert(Library._color_popups, function()
+                    Title.TextColor3 = CurrentTheme.TextPrimary
+                    Chevron.TextColor3 = CurrentTheme.TextSecondary
+                    SwatchStroke.Color = CurrentTheme.Stroke
+                end)
+
+                function ColorManager:Set(color)
+                    hue, saturation, value = color:ToHSV()
+                    render()
+                    apply(color, true)
+                end
+
+                function ColorManager:Get()
+                    return current
+                end
+
+                return ColorManager
             end
 
             -- ===================== Section / Group =====================
