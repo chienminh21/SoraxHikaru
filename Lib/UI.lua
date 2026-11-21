@@ -3838,6 +3838,7 @@ function Library:create_ui()
         
         local UIPadding = Instance.new('UIPadding')
         UIPadding.PaddingTop = UDim.new(0, 1)
+        UIPadding.PaddingBottom = UDim.new(0, 16)
         UIPadding.Parent = LeftSection
 
         local RightSection = Instance.new('ScrollingFrame')
@@ -3865,6 +3866,7 @@ function Library:create_ui()
         
         local UIPadding = Instance.new('UIPadding')
         UIPadding.PaddingTop = UDim.new(0, 1)
+        UIPadding.PaddingBottom = UDim.new(0, 16)
         UIPadding.Parent = RightSection
 
         self._tab += 1
@@ -4233,6 +4235,23 @@ function Library:create_ui()
                 local fallbackHeight = trackedHeight + 20
 
                 return math.max(measuredHeight, fallbackHeight)
+            end
+
+            -- Scroll the column so an expanded control (an open dropdown, a color picker) is fully visible
+            function ModuleManager:reveal(target, delaySeconds)
+                task.delay(delaySeconds or 0.1, function()
+                    local section = settings.section
+                    if not target.Parent or not section.Parent then
+                        return
+                    end
+
+                    local scale = math.max(UIScale.Scale, 0.01)
+                    local overflow = (target.AbsolutePosition.Y + target.AbsoluteSize.Y) - (section.AbsolutePosition.Y + section.AbsoluteSize.Y)
+                    if overflow > -12 then
+                        local maxScroll = math.max(section.AbsoluteCanvasSize.Y - section.AbsoluteWindowSize.Y, 0)
+                        section.CanvasPosition = Vector2.new(0, math.min(section.CanvasPosition.Y + (overflow + 12) / scale, maxScroll))
+                    end
+                end)
             end
 
             function ModuleManager:refresh_size()
@@ -6041,13 +6060,8 @@ function Library:create_ui()
 
                         CurrentDropSizeState = self._size;
 
-                        TweenService:Create(Module, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-                            Size = UDim2.fromOffset(241, 93 + ModuleManager._size + ModuleManager._multiplier)
-                        }):Play()
-
-                        TweenService:Create(Module.Options, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-                            Size = UDim2.fromOffset(241, ModuleManager._size + ModuleManager._multiplier)
-                        }):Play()
+                        -- scroll the column once the list has finished opening so all of it can be reached
+                        ModuleManager:reveal(Box, 0.55)
 
                         TweenService:Create(Dropdown, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
                             Size = UDim2.fromOffset(207, 39 + self._size)
@@ -6064,14 +6078,6 @@ function Library:create_ui()
                         ModuleManager._multiplier -= self._size
 
                         CurrentDropSizeState = 0;
-
-                        TweenService:Create(Module, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-                            Size = UDim2.fromOffset(241, 93 + ModuleManager._size + ModuleManager._multiplier)
-                        }):Play()
-
-                        TweenService:Create(Module.Options, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
-                            Size = UDim2.fromOffset(241, ModuleManager._size + ModuleManager._multiplier)
-                        }):Play()
 
                         TweenService:Create(Dropdown, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
                             Size = UDim2.fromOffset(207, 39)
@@ -6639,6 +6645,9 @@ function Library:create_ui()
                     end
                     setOpen(opening)
                     Library._close_picker = opening and closeSelf or nil
+                    if opening then
+                        ModuleManager:reveal(Body, 0.1)
+                    end
                 end)
 
                 -- Keep the row in sync with theme changes (called by Library_SetTheme)
