@@ -2182,8 +2182,15 @@ function Window.new(options)
 
     local camera = workspace.CurrentCamera
     local viewport = camera and camera.ViewportSize or Vector2.new(1280, 720)
+
+    -- Match the original V1 scaling:
+    -- desktop stays at 1x, while touch/mobile scales from viewport width / 1400.
     local function getWindowScale(viewportSize)
-        return math.clamp(math.min((viewportSize.X - 24) / windowWidth, (viewportSize.Y - 24) / windowHeight), 0.35, 1)
+        if UserInputService.TouchEnabled then
+            return viewportSize.X / 1400
+        end
+
+        return 1
     end
 
     local root = create("Frame", {
@@ -2201,7 +2208,7 @@ function Window.new(options)
     self._scale = create("UIScale", { Scale = getWindowScale(viewport) }, root)
     self._root = root
 
-    -- Keep the same 698 x 479 design size while scaling it to the available viewport.
+    -- Keep the original V1 698 x 479 design size and use the same mobile scale as V1.
     local function updateWindowScale()
         local currentCamera = workspace.CurrentCamera
         if currentCamera then
