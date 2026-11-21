@@ -1,29 +1,14 @@
-## Sora x Hikaru
-
-Sora x Hikaru is an improved version of the original PhiPhai v2 script, featuring various improvements and a new name.
-### Loader This Script: 
-```lua
-loadstring(game:HttpGet('https://raw.githubusercontent.com/chienminh21/SoraxHikaru/refs/heads/main/v/Loader.lua'))()
-```
-
-### My discord Server:
-```css
-https://discord.gg/6y7TpYTBkW
-```
-
-### UI Library 
-
-
-Sora x Hikaru
+# Sora x Hikaru
 
 <p align="center">
   <img src="https://capsule-render.vercel.app/api?type=venom&height=220&color=0:171326,50:5741A8,100:AA83FF&text=Sora%20x%20Hikaru&fontColor=FFFFFF&fontSize=52&fontAlignY=45&animation=fadeIn" width="100%" />
 </p>
+
 <p align="center">
-  <b>A customizable Roblox UI Library built with Luau.</b>
-  <br>
-  Designed for clean interfaces, flexible components, and straightforward development.
+  <b>A customizable Roblox UI library written in Luau.</b><br>
+  Clean interfaces, flexible components, and a simple API.
 </p>
+
 <p align="center">
   <a href="https://github.com/chienminh21/SoraxHikaru">
     <img src="https://img.shields.io/badge/GitHub-Repository-181717?style=for-the-badge&logo=github" />
@@ -32,162 +17,126 @@ Sora x Hikaru
   <img src="https://img.shields.io/badge/Language-Luau-00A2FF?style=for-the-badge" />
 </p>
 
-⸻
+Sora x Hikaru is an improved continuation of the original PhiPhai v2 project, with a new name and a clearer UI system.
 
-Introduction
+## Loader
 
-Sora x Hikaru is a customizable UI Library for Roblox projects, written in Luau.
-
-The project provides a collection of interface components that can be combined to create organized and configurable user interfaces.
-
-Instead of manually building every interface element, developers can use the library’s API to create windows, tabs, modules, controls, notifications, dialogs, and other interface features.
-
-The main goal is to provide a consistent development experience while keeping the API straightforward and customizable.
-
-Contents
-
-* Features
-* Project Structure
-* Requirements
-* Installation
-* Quick Start
-* Configuration
-* Core Concepts
-* Components
-* Notifications
-* Dialogs
-* Progress Bar
-* Theme Management
-* Background Customization
-* Watermark
-* Configuration Management
-* Complete Example
-* API Reference
-* Troubleshooting
-* Credits
-
-⸻
-
-Features
-
-Interface
-
-* Customizable interface name and version.
-* Dark and Light themes.
-* Adjustable window transparency.
-* Custom toggle key.
-* Image background support.
-* Multiple background display styles.
-* Watermark visibility control.
-
-UI Components
-
-* Tabs
-* Modules
-* Buttons
-* Checkboxes
-* Sliders
-* Range sliders
-* Dropdowns
-* Multi-select dropdowns
-* Textboxes
-* Color pickers
-* Dividers
-* Paragraphs
-* Text elements
-
-Additional Systems
-
-* Multiple notification types.
-* Custom notification icons.
-* Confirmation dialogs.
-* Progress bar with completion callback.
-* Configuration saving.
-* Configuration exporting.
-* Configuration resetting.
 ```lua
-⸻
+loadstring(game:HttpGet("https://raw.githubusercontent.com/chienminh21/SoraxHikaru/refs/heads/main/v/Loader.lua"))()
+```
 
-Project Structure
+## Discord
 
+```
+https://discord.gg/6y7TpYTBkW
+```
+
+## Introduction
+
+Sora x Hikaru is a UI library for Roblox scripts written in Luau.
+
+It gives you ready-made interface pieces so you can build windows, tabs, modules, controls, notifications, dialogs, and more without assembling every element by hand.
+
+The goal is a consistent layout and a straightforward API that is still easy to customize.
+
+## Features
+
+**Interface**
+- Custom name and version
+- Dark and Light themes, plus custom themes
+- Adjustable window transparency
+- Custom toggle key
+- Image backgrounds with multiple display styles
+- Optional watermark
+
+**Components**
+- Tabs and modules
+- Buttons, checkboxes, textboxes
+- Sliders and range sliders
+- Single and multi-select dropdowns
+- Color pickers
+- Dividers, paragraphs, and text labels
+
+**Systems**
+- Info / success / warn / error notifications
+- Custom notification icons
+- Confirmation dialogs
+- Progress bar with completion callback
+- Save, export, and reset configuration
+
+## Project Structure
+
+```text
 SoraxHikaru/
-│
 ├── Lib/
 │   └── UI.lua
-│
 ├── Example.lua
-│
 └── README.md
-
-File	Description
-Lib/UI.lua	Main UI Library
-Example.lua	Example implementation
-README.md	Project documentation
-
-⸻
 ```
-Requirements
 
-Before using the library, make sure your environment supports the APIs required by your implementation.
+| File | Description |
+|------|-------------|
+| `Lib/UI.lua` | Main UI library |
+| `Example.lua` | Full usage example |
+| `README.md` | Documentation |
 
-The loading example uses:
+## Requirements
 
-* Luau
-* Roblox game services
-* game:HttpGet()
-* loadstring()
-* getgenv()
+The load example expects an environment that supports:
 
-Environment note: The loading example uses APIs commonly associated with compatible client execution environments. It is not a standard Roblox Studio LocalScript installation method.
+- Luau
+- Roblox services
+- `game:HttpGet()`
+- `loadstring()`
+- `getgenv()`
 
-⸻
+This is not a standard Roblox Studio LocalScript install path. It targets client execution environments that expose those APIs.
 
-Installation
+## Installation
 
-1. Load the Library
+**1. Load the library**
 
-Use the raw GitHub source to retrieve the main library file.
 ```lua
 local BASE = "https://raw.githubusercontent.com/chienminh21/SoraxHikaru/main/"
-local Library = loadstring(
-    game:HttpGet(BASE .. "Lib/UI.lua")
-)()
+local Library = loadstring(game:HttpGet(BASE .. "Lib/UI.lua"))()
 ```
-2. Create a Window
+
+**2. Create a window**
+
 ```lua
 local Window = Library.new()
 ```
-3. Create Tabs
+
+**3. Create tabs**
+
 ```lua
 local Main = Window:create_tab("Main", "home")
 local Visuals = Window:create_tab("Visuals", "eye")
 local Settings = Window:create_tab("Settings", "settings")
 ```
-4. Load the Interface
+
+**4. Load the UI**
+
 ```lua
 Window:load()
 ```
-⸻
 
-Example test
+## Quick test
 
-The following example demonstrates the basic setup.
 ```lua
 loadstring(game:HttpGet("https://raw.githubusercontent.com/chienminh21/SoraxHikaru/refs/heads/main/Lib/Example.lua"))()
 ```
-⸻
 
-Configuration
+## Configuration
 
-Configuration must be defined before loading the library.
+Set `getgenv().GG` **before** loading the library. Every field is optional.
 
-All options are optional in the supplied example.
 ```lua
 getgenv().GG = {
     UIName = "Sora x Hikaru",
     Version = "v2.0",
-    Theme = "Dark",                  -- "Dark", "Light" or the name of a custom theme
-    Themes = {                       -- custom themes: missing colors come from Base ("Dark" by default)
+    Theme = "Dark",
+    Themes = {
         Ocean = {
             Base = "Dark",
             Background = Color3.fromRGB(8, 16, 28),
@@ -198,89 +147,87 @@ getgenv().GG = {
             Stroke = Color3.fromRGB(34, 64, 96),
         },
     },
-    TextColor = nil,                 -- optional: Color3 for all main UI text (dividers follow it)
-    Transparency = 0.15,             -- window transparency (0 = solid)
-    ToggleKey = Enum.KeyCode.Insert, -- key that shows / hides the window
-    NotifyMode = "new",              -- notification style: "new" or "old"
-    Watermark = true,                -- icon in a screen corner (also toggled by the "Show watermark" pill)
-    WatermarkIcon = "rbxassetid://76051962811019", -- asset id / image URL / Lucide name
-    WatermarkSize = 40,              -- icon size in pixels
-    WatermarkPosition = "TopLeft",   -- TopLeft | TopRight | BottomLeft | BottomRight
-    WatermarkTransparency = 0,       -- 0 = solid, 1 = invisible
-    WatermarkText = "",              -- optional text next to the icon, "{fps}" shows the FPS
-    ImageBackground = "",            -- "rbxassetid://..." / image URL / "" (none)
-    ImageBackgroundStyle = "Crop",   -- Stretch | Fit | Crop | Tile | FadeLeft | FadeRight | FadeTop | FadeBottom
+    TextColor = nil,
+    Transparency = 0.15,
+    ToggleKey = Enum.KeyCode.Insert,
+    NotifyMode = "new",
+    Search = true,
+    SearchKey = Enum.KeyCode.F,
+    Watermark = true,
+    WatermarkIcon = "rbxassetid://76051962811019",
+    WatermarkSize = 40,
+    WatermarkPosition = "TopLeft",
+    WatermarkTransparency = 0,
+    WatermarkText = "",
+    ImageBackground = "",
+    ImageBackgroundStyle = "Crop",
     ImageBackgroundTransparency = 0.7,
 }
 ```
-Configuration Options
 
-Option	Type	Description
-UIName	String	Interface name
-Version	String	Interface version
-Theme	String	Dark or Light
-Transparency	Number	Window transparency
-ToggleKey	Enum.KeyCode	Interface visibility key
-NotifyMode	String	new or old
-Watermark	Boolean	Enables or disables watermark
-ImageBackground	String	Image asset ID or URL
-ImageBackgroundStyle	String	Background display style
-ImageBackgroundTransparency	Number	Background image transparency
+| Option | Type | Description |
+|--------|------|-------------|
+| `UIName` | string | Window title |
+| `Version` | string | Version label |
+| `Theme` | string | `"Dark"`, `"Light"`, or a custom theme name |
+| `Transparency` | number | Window transparency (`0` = solid) |
+| `ToggleKey` | `Enum.KeyCode` | Show / hide key |
+| `NotifyMode` | string | `"new"` or `"old"` |
+| `Watermark` | boolean | Show watermark |
+| `ImageBackground` | string | Asset id or URL |
+| `ImageBackgroundStyle` | string | Background style |
+| `ImageBackgroundTransparency` | number | Background image transparency |
 
-⸻
+## Core concepts
 
-Core Concepts
+### Window
 
-Window
-
-The Window is the main container of the interface.
 ```lua
 local Window = Library.new()
 ```
-It is responsible for creating and loading the UI.
 
-Tabs
+### Tabs
 
-Tabs organize different sections of the interface.
 ```lua
 local Main = Window:create_tab("Main", "home")
-local Visuals = Window:create_tab("Visuals", "eye")
-local Settings = Window:create_tab("Settings", "settings")
 ```
-The second argument accepts an icon identifier.
 
-Modules
+The second argument is a Lucide icon name.
 
-Modules organize related controls inside a tab.
+### Modules
+
+Modules group related controls inside a tab.
+
 ```lua
 local Example = Main:create_module({
     title = "Example",
     description = "Example module",
     flag = "example",
     section = "left",
+    setting = true,
+    notification = true,
     callback = function(state)
         print(state)
     end,
 })
 ```
-Module options:
 
-Option	Description
-title	Module title
-description	Module description
-flag	Unique configuration identifier
-section	Module placement: left or right
-callback	Called when module state changes
+| Option | Description |
+|--------|-------------|
+| `title` | Module title |
+| `description` | Short description |
+| `flag` | Unique config key |
+| `section` | `"left"` or `"right"` |
+| `setting` | Gear menu (keybind, activation mode, startup…) |
+| `notification` | Bell menu (notify on enable / disable) |
+| `callback` | Called when the module is toggled |
 
-Use unique flags for different components to avoid configuration conflicts.
+Always use unique flags so saved values do not collide.
 
-⸻
+## Components
 
-Components
+### Button
 
-Button
-
-Creates an interactive button.
 ```lua
 Example:create_button({
     title = "Execute",
@@ -289,9 +236,9 @@ Example:create_button({
     end,
 })
 ```
-Checkbox
 
-Creates a Boolean control.
+### Checkbox
+
 ```lua
 Example:create_checkbox({
     title = "Enable Feature",
@@ -301,9 +248,9 @@ Example:create_checkbox({
     end,
 })
 ```
-Slider
 
-Creates a numeric slider.
+### Slider
+
 ```lua
 Example:create_slider({
     title = "Speed",
@@ -312,21 +259,16 @@ Example:create_slider({
     maximum_value = 100,
     value = 50,
     round_number = true,
+    left_color = Color3.fromRGB(255, 255, 255),
+    max_color = Color3.fromRGB(0, 0, 0),
     callback = function(value)
         print("Speed:", value)
     end,
 })
 ```
-Option	Description
-minimum_value	Minimum allowed value
-maximum_value	Maximum allowed value
-value	Initial value
-round_number	Rounds the displayed value
-callback	Receives the selected value
 
-Range Slider
+### Range slider
 
-Creates a slider with two values.
 ```lua
 Example:create_range_slider({
     title = "Delay",
@@ -336,60 +278,43 @@ Example:create_range_slider({
     min_value = 1,
     max_value = 3,
     callback = function(minValue, maxValue)
-        print("Minimum:", minValue)
-        print("Maximum:", maxValue)
+        print(minValue, maxValue)
     end,
 })
 ```
-The callback receives the selected minimum and maximum values.
 
-Dropdown
+### Dropdown
 
-Creates a single-selection dropdown.
 ```lua
 Example:create_dropdown({
     title = "Target",
     flag = "target",
-    options = {
-        "Nearest",
-        "Lowest HP",
-        "Boss",
-    },
+    options = { "Nearest", "Lowest HP", "Boss" },
     maximum_options = 6,
     callback = function(option)
         print("Selected:", option)
     end,
 })
 ```
-maximum_options is included in the supplied example and should be provided when creating a dropdown.
 
-Multi-select Dropdown
+### Multi-select dropdown
 
-Use multi_dropdown = true to enable multiple selections.
 ```lua
 Example:create_dropdown({
     title = "Items",
     flag = "items",
-    options = {
-        "Coin",
-        "Gem",
-        "Key",
-    },
+    options = { "Coin", "Gem", "Key" },
     maximum_options = 6,
-    multi_dropdown = true, 
+    multi_dropdown = true,
     callback = function(option)
         local selected = Library._config._flags.items or {}
         print(table.concat(selected, ", "))
     end,
 })
-
 ```
 
-The selected list can be read from the configuration flags.
+### Textbox
 
-Textbox
-
-Creates a text input.
 ```lua
 Example:create_textbox({
     title = "Username",
@@ -400,103 +325,49 @@ Example:create_textbox({
     end,
 })
 ```
-Color Picker
 
-Creates a color selection control.
+### Color picker
+
 ```lua
 local ColorPicker = Example:create_colorpicker({
     title = "Outline Color",
     flag = "outline_color",
     default = Color3.fromRGB(99, 102, 241),
     callback = function(color)
-        print("Selected color:", color)
+        print(color)
     end,
 })
-```
-Read the selected color:
-```lua
-local currentColor = ColorPicker:Get()
-```
-Change the selected color:
-```lua
+
+local current = ColorPicker:Get()
 ColorPicker:Set(Color3.fromRGB(255, 0, 0))
 ```
-Divider
 
-Creates a visual divider.
-```lua
-Example:create_divider({
-    showtopic = true,
-    title = "Settings",
-})
-```
-Paragraph
+### Divider / paragraph / text
 
-Creates a paragraph for additional information.
 ```lua
+Example:create_divider({ showtopic = true, title = "Settings" })
+
 Example:create_paragraph({
     title = "Information",
     text = "This is an example paragraph.",
     customScale = 70,
 })
-```
-Text
 
-Creates a text element that can be updated.
-```lua
 local Status = Example:create_text({
     text = "Status: Idle",
     CustomYSize = 24,
 })
+Status:Set({ text = "Status: Ready" })
 ```
-Update the text:
-```lua
-Status:Set({
-    text = "Status: Ready",
-})
-```
-⸻
 
-Notifications
+## Notifications
 
-Sora x Hikaru provides several notification types.
+```lua
+Library.Notify.Info("Information", "Something happened.", 3)
+Library.Notify.Success("Success", "Operation completed.", 3)
+Library.Notify.Warn("Warning", "Please be careful.", 3)
+Library.Notify.Error("Error", "Something went wrong.", 3)
 
-Info
-```lua
-Library.Notify.Info(
-    "Information",
-    "Something happened.",
-    3
-)
-```
-Success
-```lua
-Library.Notify.Success(
-    "Success",
-    "Operation completed.",
-    3
-)
-```
-Warning
-```
-Library.Notify.Warn(
-    "Warning",
-    "Please be careful.",
-    3
-)
-```
-Error
-```lua
-Library.Notify.Error(
-    "Error",
-    "Something went wrong.",
-    3
-)
-```
-Custom Notification
-
-Use Library.Notify.Send() to provide additional notification options.
-```lua
 Library.Notify.Send({
     title = "Sora x Hikaru",
     text = "Welcome!",
@@ -505,18 +376,9 @@ Library.Notify.Send({
     duration = 3,
 })
 ```
-Property	Description
-title	Notification title
-text	Notification message
-type	Notification type
-icon	Icon identifier
-duration	Display duration
 
-⸻
+## Dialogs
 
-Dialogs
-
-Dialogs can be used to display information and request confirmation.
 ```lua
 Window:Dialog({
     Icon = "alert-circle",
@@ -529,11 +391,7 @@ Window:Dialog({
             Icon = "check",
             Variant = "Destructive",
             Callback = function()
-                Library.Notify.Success(
-                    "Confirmed",
-                    "Action completed.",
-                    3
-                )
+                Library.Notify.Success("Confirmed", "Action completed.", 3)
             end,
         },
         {
@@ -547,214 +405,101 @@ Window:Dialog({
     },
 })
 ```
-Dialog Properties
 
-Property	Description
-Icon	Dialog icon
-IconThemed	Applies theme styling to the icon
-Title	Dialog title
-Content	Dialog description
-Buttons	List of dialog buttons
+## Progress bar
 
-Each button can define a title, icon, variant, and callback.
-
-⸻
-
-Progress Bar
-
-The progress bar provides a way to display progress for an operation.
 ```lua
 local Progress = Main:ProgressBar({
     Title = "Download",
     Desc = "Downloading files...",
     Icon = "download",
-    Value = {
-        Min = 0,
-        Max = 100,
-        Default = 0,
-    },
+    Value = { Min = 0, Max = 100, Default = 0 },
     Visible = false,
     AutoHide = true,
     OnComplete = function()
-        Library.Notify.Success(
-            "Download",
-            "Finished!",
-            3
-        )
+        Library.Notify.Success("Download", "Finished!", 3)
     end,
 })
-```
-Progress Methods
 
-Reset the progress:
-```lua
 Progress:Reset()
-
-Set a specific value:
-
 Progress:Set(50)
-
-Increase progress:
-
 Progress:Increment(10)
-
-Run the progress animation:
-
 Progress:Run(5)
-
-The Run() example uses a duration of five seconds.
 ```
-⸻
 
-Theme Management
+## Theme and transparency
 
-The library supports Dark and Light themes through its configuration and theme setter.
-
-Set Theme
 ```lua
 Library.SetTheme("Dark")
-```
-Or:
-```lua
 Library.SetTheme("Light")
+Library.SetThemeColor("Accent", Color3.fromRGB(152, 181, 255))
+Library.SetTransparency(0.15)
 ```
-Theme Dropdown
+
+Use a `ready` flag so theme callbacks do not fire side effects while saved config is restored:
+
 ```lua
+local ready = false
+
 Interface:create_dropdown({
     title = "Theme",
     flag = "ui_theme",
-    options = {
-        "Dark",
-        "Light",
-    },
-    maximum_options = 2,
+    options = Library.GetThemes(),
+    maximum_options = 6,
     callback = function(option)
         if ready then
             Library.SetTheme(option)
         end
     end,
 })
+
+Window:load()
+ready = true
 ```
-The ready flag prevents initialization callbacks from triggering additional side effects while the saved configuration is being loaded.
 
-⸻
+## Background
 
-Transparency
-
-Change the window transparency:
 ```lua
-Library.SetTransparency(0.15)
+Window:SetImageBackground("rbxassetid://123456789")
+Window:SetImageBackground("rbxassetid://123456789", "Crop")
+Window:SetImageBackground("rbxassetid://123456789", nil, 0.7)
 ```
-A slider can be used to control transparency dynamically.
+
+| Style | Description |
+|-------|-------------|
+| `Crop` | Crop to fit |
+| `Stretch` | Stretch to fill |
+| `Fit` | Fit inside |
+| `Tile` | Repeat |
+| `FadeLeft` / `FadeRight` / `FadeTop` / `FadeBottom` | Directional fade |
+
+## Watermark
+
 ```lua
-Interface:create_slider({
-    title = "Window Transparency",
-    flag = "ui_transparency",
-    minimum_value = 0,
-    maximum_value = 90,
-    value = 15,
-    round_number = true,
-    callback = function(value)
-        Library.SetTransparency(value / 100)
-    end,
-})
-```
-⸻
-
-Background Customization
-
-The library supports image backgrounds through Window:SetImageBackground().
-
-Set Background
-```lua
-Window:SetImageBackground(
-    "rbxassetid://123456789"
-)
-```
-Set Background Style
-```lua
-Window:SetImageBackground(
-    "rbxassetid://123456789",
-    "Crop"
-)
-```
-Set Background Transparency
-```lua
-Window:SetImageBackground(
-    "rbxassetid://123456789",
-    nil,
-    0.7
-)
-```
-Supported Styles
-
-Style	Description
-Crop	Crops the image to fit
-Stretch	Stretches the image
-Fit	Fits the image
-Tile	Repeats the image
-FadeLeft	Left fade
-FadeRight	Right fade
-FadeTop	Top fade
-FadeBottom	Bottom fade
-
-⸻
-
-Watermark
-
-The watermark can be controlled through the library.
-
-Enable or Disable
-
 Library.SetWatermark(true)
 Library.SetWatermark(false)
-
-Toggle
-
 Library.SetWatermark(not Library._watermark_on)
-
-The initial visibility can also be configured using:
-```lua
-getgenv().GG = {
-    Watermark = true,
-}
+Library.SetWatermarkIcon("rbxassetid://76051962811019")
 ```
-⸻
 
-Notification Style
+## Notification style
 
-The notification mode can be configured with:
 ```lua
 Library.SetNotifyMode("new")
-```
-Or:
-```lua
 Library.SetNotifyMode("old")
 ```
-Available configuration values:
 
-* new
-* old
+## Configuration management
 
-⸻
-
-Configuration Management
-
-The library includes configuration management methods.
 ```lua
-Save Configuration
-
 Library.SaveConfig()
-
-Export Configuration
-
+Library.LoadConfig()
 Library.ExportConfig()
-```
-Reset Configuration
-
 Library.ResetConfig()
+```
 
-These methods can be connected to buttons inside a module.
+Example buttons:
+
 ```lua
 local Config = Settings:create_module({
     title = "Config",
@@ -763,120 +508,73 @@ local Config = Settings:create_module({
     section = "right",
     callback = function() end,
 })
-Config:create_button({
-    title = "Save Config",
-    callback = Library.SaveConfig,
-})
-Config:create_button({
-    title = "Export Config",
-    callback = Library.ExportConfig,
-})
+
+Config:create_button({ title = "Save Config", callback = Library.SaveConfig })
+Config:create_button({ title = "Export Config", callback = Library.ExportConfig })
+Config:create_button({ title = "Reset Config", callback = Library.ResetConfig })
 ```
-⸻
 
-Complete Example
+## API reference
 
-A complete example demonstrating the library’s available components and systems is provided in:
+| API | Description |
+|-----|-------------|
+| `Library.new()` | Create window |
+| `Window:create_tab()` | Create tab |
+| `Window:load()` | Show UI |
+| `Tab:create_module()` | Create module |
+| `Module:create_button()` | Button |
+| `Module:create_checkbox()` | Checkbox |
+| `Module:create_slider()` | Slider |
+| `Module:create_range_slider()` | Range slider |
+| `Module:create_dropdown()` | Dropdown |
+| `Module:create_textbox()` | Textbox |
+| `Module:create_colorpicker()` | Color picker |
+| `Module:create_divider()` | Divider |
+| `Module:create_paragraph()` | Paragraph |
+| `Module:create_text()` | Text label |
+| `Window:Dialog()` | Dialog |
+| `Tab:ProgressBar()` | Progress bar |
+| `Library.SetTheme()` | Set theme |
+| `Library.SetTransparency()` | Window transparency |
+| `Library.SetWatermark()` | Watermark visibility |
+| `Library.SetNotifyMode()` | Notification style |
+| `Library.SaveConfig()` | Save config |
+| `Library.ExportConfig()` | Export config |
+| `Library.ResetConfig()` | Reset config |
 
-Example.lua
+## Troubleshooting
 
-The example includes:
+**UI does not appear**
+- Confirm the raw GitHub URL is correct
+- Confirm `Lib/UI.lua` exists in the repo
+- Confirm the executor supports `HttpGet` / `loadstring` / `getgenv`
+- Check the developer console for errors
 
-* Library initialization
-* Window creation
-* Tab creation
-* Module configuration
-* UI component examples
-* Notification examples
-* Dialog examples
-* Progress bar
-* Theme settings
-* Background customization
-* Watermark controls
-* Configuration management
+**A control does nothing**
+- Create it from a module, not from the tab root
+- Give every saved control a unique `flag`
+- Check callback arguments
+- Provide required fields such as `maximum_options` on dropdowns
 
-⸻
+**Config behaves oddly**
+- Define `GG` before loading the library
+- Avoid duplicate flags
+- Use a `ready` flag so init callbacks do not run side effects
 
-API Reference
-```lua
-API	Description
-Library.new()	Creates a new window
-Window:create_tab()	Creates a tab
-Window:load()	Loads the interface
-Tab:create_module()	Creates a module
-Module:create_button()	Creates a button
-Module:create_checkbox()	Creates a checkbox
-Module:create_slider()	Creates a slider
-Module:create_range_slider()	Creates a range slider
-Module:create_dropdown()	Creates a dropdown
-Module:create_textbox()	Creates a textbox
-Module:create_colorpicker()	Creates a color picker
-Module:create_divider()	Creates a divider
-Module:create_paragraph()	Creates a paragraph
-Module:create_text()	Creates a text element
-Window:Dialog()	Opens a dialog
-Main:ProgressBar()	Creates a progress bar
-Library.SetTheme()	Changes the theme
-Library.SetTransparency()	Changes window transparency
-Library.SetWatermark()	Changes watermark visibility
-Library.SetNotifyMode()	Changes notification mode
-Library.SaveConfig()	Saves configuration
-Library.ExportConfig()	Exports configuration
-Library.ResetConfig()	Resets configuration
-```
-⸻
+## Development
 
-Troubleshooting
+Sora x Hikaru is under active development. APIs and components may change.
 
-The interface does not appear
+See `Example.lua` for a full working sample.
 
-Check the following:
+## Credits
 
-* Verify that the raw GitHub URL is correct.
-* Make sure Lib/UI.lua exists in the repository.
-* Check whether the loading environment supports the APIs used by the example.
-* Check the developer console for errors.
-
-A component does not work
-
-* Verify that the component is created from the correct module.
-* Make sure every component that requires a flag has a unique flag.
-* Check the callback arguments.
-* Confirm that required options are provided.
-
-Configuration does not behave as expected
-
-* Define GG before loading the library.
-* Check for duplicate flags.
-* Verify the saved values.
-* Make sure initialization callbacks do not trigger unwanted side effects.
-
-⸻
-
-Development
-
-Sora x Hikaru is maintained as an evolving UI Library project.
-
-The API and available components may change as development continues.
-
-For implementation examples, refer to Example.lua.
-
-Credits
-Fork: https://github.com/MarchHubOnTopFr/Allusive-UI/tree/main
-
-Developer: chienminh21
-
-Project: Sora x Hikaru
-
-
-* GitHub Repository: https://github.com/chienminh21/SoraxHikaru
-
-⸻
+- Fork base: [Allusive UI](https://github.com/MarchHubOnTopFr/Allusive-UI/tree/main)
+- Developer: [chienminh21](https://github.com/chienminh21)
+- Project: [Sora x Hikaru](https://github.com/chienminh21/SoraxHikaru)
 
 <p align="center">
-  <b>Sora x Hikaru</b>
-  <br>
-  Built with Luau.
-  <br><br>
+  <b>Sora x Hikaru</b><br>
+  Built with Luau.<br><br>
   <i>Clean interface. Flexible components. Simple development.</i>
 </p>
