@@ -1,27 +1,22 @@
---[[
-    Sora x Hikaru | SoraHikaruV2.lua
-    UI v2 in one file: no other V2 file is needed and nothing is downloaded while it runs.
+-- Sora x Hikaru V2
+-- Standalone build. Every V2 system lives in this file; nothing is required from Lib/V2 at runtime.
+-- The window chrome follows Lib/UI.lua (proportions, sidebar, cards, toggle, type). 
+-- ColorPicker is the Lib/V2/ColorPicker.lua design, unchanged.
+--
+--   local V2 = loadstring(game:HttpGet("SoraHikaruV2.lua"))()  -- or readfile
+--   local Window = V2.new({})
+--   local Combat = Window:AddTab("Combat", "swords")
+--   Combat:AddFeature({ Name = "Auto Parry", Description = "...", Setting = true, Notification = true, Callback = function(state) end })
 
-        local V2 = loadstring(readfile("SoraHikaruV2.lua"))()      -- or loadstring(game:HttpGet(<url of this file>))()
-        local Window = V2.new({ Library = Library })               -- Library (UI v1) is optional: icons and notifications
-        local Combat = Window:AddTab("Combat", "swords")
-        local card = Combat:AddFeature({ Name = "Auto Parry", Description = "...", Setting = true, Notification = true, Callback = function(state, source) end })
+local function globalConfig()
+    local env = (getgenv and getgenv()) or _G
+    if type(env) ~= "table" then
+        return {}
+    end
+    return env.GG or {}
+end
 
-    No tabs exist until you add them with Window:AddTab(name, icon). A tab named GUI gets the Appearance section
-    and a tab named Config gets the configuration buttons.
-    Window:AddTab / tab:AddFeature / card:AddToggle, AddSlider, AddDropdown, AddButton, AddText, AddDivider,
-    Window:Search / SetOpen / IsOpen / Show / Hide / Toggle / Minimize / Destroy, and the UI v1 style create_tab /
-    create_module methods (Compat) keep their V2 behavior.
-    The window is open at 698 x 479 and collapses to 150 x 40. The title bar (logo and name), the floating logo
-    button and the toggle key (Insert) all switch the same state.
-    V2.new options: Library, Folder, Preset ("Dark" | "Light" | "Pure Black" | "Midnight"), Title, Version,
-    Categories (optional list of { name, icon } to create at start), ToggleKey, NotificationSoundId, Transparency,
-    Logo, GalacticText, ButtonOpenMenu (boolean, default false: show/hide the floating menu launcher).
-]]
-
-local modules = {}
-
-modules.Janitor = (function()
+-- ========================================================================
 -- Lib/V2/Janitor.lua
 -- Collects things that must be cleaned up together (connections, instances, functions, threads).
 
@@ -85,10 +80,8 @@ function Janitor:Count()
     return #self._items
 end
 
-return Janitor
-end)()
 
-modules.Store = (function()
+-- ========================================================================
 -- Lib/V2/Store.lua
 -- One JSON file with everything v2 remembers: theme, per-feature settings, window and button positions.
 -- Writes are delayed a moment so dragging or typing does not hit the disk on every change.
@@ -257,10 +250,8 @@ function Store:Destroy()
     self:Flush()
 end
 
-return Store
-end)()
 
-modules.Theme = (function()
+-- ========================================================================
 -- Lib/V2/Theme.lua
 -- The six colors every part of the interface is painted with. Changing one notifies every subscriber,
 -- so the whole interface updates at once.
@@ -275,25 +266,8 @@ for _, key in ipairs(Theme.Keys) do
     validKeys[key] = true
 end
 
--- Hex strings, so presets can be stored and edited as plain text.
--- Dark and Light are the UI v1 palettes (Dark is the default).
+-- Hex strings, so presets can be stored and edited as plain text
 Theme.Presets = {
-    Dark = {
-        MainColor = "#0C0D0F",
-        Secondary = "#161C26",
-        Accent = "#98B5FF",
-        Stroke = "#344259",
-        Text = "#FFFFFF",
-        SubText = "#98B5FF",
-    },
-    Light = {
-        MainColor = "#F5F7FA",
-        Secondary = "#FFFFFF",
-        Accent = "#6366F1",
-        Stroke = "#DCE1EB",
-        Text = "#1E1E28",
-        SubText = "#5A5A6E",
-    },
     ["Pure Black"] = {
         MainColor = "#060607",
         Secondary = "#121214",
@@ -310,8 +284,25 @@ Theme.Presets = {
         Text = "#ECECF6",
         SubText = "#9698B8",
     },
+    -- V1 Dark / Light palettes (Lib/UI.lua), mapped onto the six V2 color keys.
+    Sora = {
+        MainColor = "#0C0D0F",
+        Secondary = "#161C26",
+        Accent = "#98B5FF",
+        Stroke = "#344259",
+        Text = "#FFFFFF",
+        SubText = "#98B5FF",
+    },
+    Light = {
+        MainColor = "#F5F7FA",
+        Secondary = "#FFFFFF",
+        Accent = "#6366F1",
+        Stroke = "#DCE1EB",
+        Text = "#1E1E28",
+        SubText = "#5A5A6E",
+    },
 }
-Theme.DefaultPreset = "Dark"
+Theme.DefaultPreset = "Pure Black"
 
 function Theme.toHex(color)
     local function channel(value)
@@ -451,10 +442,8 @@ function Theme:Subscribe(listener)
     end
 end
 
-return Theme
-end)()
 
-modules.Feature = (function()
+-- ========================================================================
 -- Lib/V2/Feature.lua
 -- Everything a feature does, without any UI: the main state, per-feature settings, notification rules,
 -- keybind behaviour (toggle / hold) and what is saved. The three parts stay independent:
@@ -492,11 +481,6 @@ local defaultSettingRows = {
     { Id = "Reset", Type = "Button", Name = "Reset Settings" },
 }
 
-local defaultRowIds = {}
-for _, row in ipairs(defaultSettingRows) do
-    defaultRowIds[row.Id] = true
-end
-
 local notificationRows = {
     { Id = "Enabled", Type = "Toggle", Name = "Enabled" },
     { Id = "OnEnabled", Type = "Toggle", Name = "On Enabled" },
@@ -514,7 +498,7 @@ function Feature.new(def, deps)
     local self = setmetatable({}, Feature)
 
     self.Name = def.Name or "Feature"
-    self.Id = sanitize(def.Id or self.Name)
+    self.Id = def.Id or sanitize(self.Name)
     self.Description = def.Description or ""
     self.HasSettingsButton = def.Setting == true
     self.HasNotificationButton = def.Notification == true
@@ -538,14 +522,8 @@ function Feature.new(def, deps)
             self._rows[#self._rows + 1] = copyValue(row)
         end
     end
-    self._customIds = {}
     for _, row in ipairs(requested.Custom or def.Custom or {}) do
-        if defaultRowIds[row.Id] or self._customIds[row.Id] then
-            warn("[Sora x Hikaru] feature '" .. self.Name .. "': custom setting id '" .. tostring(row.Id) .. "' is already used and was skipped")
-        else
-            self._customIds[row.Id] = true
-            self._rows[#self._rows + 1] = copyValue(row)
-        end
+        self._rows[#self._rows + 1] = copyValue(row)
     end
 
     -- Defaults
@@ -557,10 +535,8 @@ function Feature.new(def, deps)
         ShowButton = false,
         Custom = {},
     }
-    for _, row in ipairs(self._rows) do
-        if self._customIds[row.Id] then
-            self._defaults.Custom[row.Id] = copyValue(row.Default)
-        end
+    for _, row in ipairs(requested.Custom or def.Custom or {}) do
+        self._defaults.Custom[row.Id] = copyValue(row.Default)
     end
     self._notificationDefaults = {}
     for key, value in pairs(defaultNotifications) do
@@ -604,7 +580,7 @@ function Feature:_loadSaved()
             self._settings.ShowButton = settings.ShowButton
         end
         if type(settings.Custom) == "table" then
-            for id in pairs(self._customIds) do
+            for id in pairs(self._defaults.Custom) do
                 if settings.Custom[id] ~= nil then
                     self._settings.Custom[id] = settings.Custom[id]
                 end
@@ -718,7 +694,7 @@ function Feature:GetSettingsSchema()
     local schema = {}
     for _, row in ipairs(self._rows) do
         local entry = copyValue(row)
-        if self._customIds[row.Id] then
+        if self._defaults.Custom[row.Id] ~= nil or (row.Default ~= nil and row.Type ~= "Button") then
             entry.Value = self._settings.Custom[row.Id]
         elseif row.Id ~= "Reset" then
             entry.Value = self._settings[row.Id]
@@ -739,7 +715,7 @@ function Feature:GetNotificationSchema()
 end
 
 function Feature:GetSetting(id)
-    if self._customIds[id] then
+    if self._defaults.Custom[id] ~= nil or self._settings.Custom[id] ~= nil then
         return self._settings.Custom[id]
     end
     return self._settings[id]
@@ -756,8 +732,8 @@ end
 
 -- Returns true when the value was accepted
 function Feature:SetSetting(id, value)
-    if self._customIds[id] then
-        local custom = findRow(self._rows, id)
+    local custom = findRow(self._rows, id)
+    if custom and self._defaults.Custom[id] ~= nil or custom and custom.Default ~= nil then
         self._settings.Custom[id] = value
         if type(custom.Callback) == "function" then
             pcall(custom.Callback, value)
@@ -814,9 +790,9 @@ function Feature:ResetSettings()
     self._settings = copyValue(self._defaults)
     self:_save()
     self:_emit("reset")
-    for id in pairs(self._customIds) do
+    for id in pairs(self._defaults.Custom) do
         local row = findRow(self._rows, id)
-        if type(row.Callback) == "function" then
+        if row and type(row.Callback) == "function" then
             pcall(row.Callback, self._settings.Custom[id])
         end
     end
@@ -864,17 +840,16 @@ function Router:Handle(keyName, isDown)
     return count
 end
 
-return Feature
-end)()
 
-modules.Components = (function()
+-- ========================================================================
+-- Lib/V2/Components.lua
+-- Small reusable widgets. Every widget paints itself from the theme and registers its cleanup in ctx.Janitor.
+-- ctx = { Theme, Janitor, Store, Mix, State = { Capturing }, ApplyIcon(label, name) -> boolean }
+
 local Components = {}
 
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
-
-local fontFamily = "rbxasset://fonts/families/GothamSSm.json"
-local arrowImage = "rbxassetid://84232453189324"
 
 local function merge(defaults, overrides)
     local result = {}
@@ -888,12 +863,6 @@ local function merge(defaults, overrides)
 end
 Components.merge = merge
 
--- Same typeface family as UI v1
-function Components.font(weight)
-    return Font.new(fontFamily, weight or Enum.FontWeight.SemiBold, Enum.FontStyle.Normal)
-end
-local font = Components.font
-
 function Components.create(className, properties, parent)
     local instance = Instance.new(className)
     for property, value in pairs(properties or {}) do
@@ -905,7 +874,7 @@ end
 local create = Components.create
 
 function Components.tween(instance, properties, seconds)
-    TweenService:Create(instance, TweenInfo.new(seconds or 0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), properties):Play()
+    TweenService:Create(instance, TweenInfo.new(seconds or 0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), properties):Play()
 end
 local tween = Components.tween
 
@@ -923,7 +892,6 @@ function Components.contrast(color)
     local brightness = color.R * 0.299 + color.G * 0.587 + color.B * 0.114
     return brightness > 0.6 and Color3.fromRGB(12, 12, 14) or Color3.fromRGB(255, 255, 255)
 end
-local contrast = Components.contrast
 
 -- bindings: { Property = "ThemeKey" | function(theme) return value end }. Repaints on every theme change.
 function Components.bind(ctx, instance, bindings)
@@ -945,29 +913,20 @@ function Components.corner(parent, radius)
     return create("UICorner", { CornerRadius = UDim.new(0, radius) }, parent)
 end
 
-function Components.stroke(ctx, parent, key, transparency)
-    local stroke = create("UIStroke", {
-        Thickness = 1,
-        Transparency = transparency or 0,
-        ApplyStrokeMode = Enum.ApplyStrokeMode.Border,
-    }, parent)
+function Components.stroke(ctx, parent, key)
+    local stroke = create("UIStroke", { Thickness = 1, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, parent)
     bind(ctx, stroke, { Color = key or "Stroke" })
     return stroke
 end
 
-
--- Text uses the v1 typeface unless the caller picks Font / FontFace itself
 function Components.label(ctx, parent, properties, colorKey)
-    local merged = merge({
+    local label = create("TextLabel", merge({
         BackgroundTransparency = 1,
-        TextSize = 11,
+        Font = Enum.Font.Gotham,
+        TextSize = 12,
         TextXAlignment = Enum.TextXAlignment.Left,
         Text = "",
-    }, properties)
-    if merged.Font == nil and merged.FontFace == nil then
-        merged.FontFace = font()
-    end
-    local label = create("TextLabel", merged, parent)
+    }, properties), parent)
     bind(ctx, label, { TextColor3 = colorKey or "Text" })
     return label
 end
@@ -996,7 +955,7 @@ function Components.icon(ctx, parent, properties)
         AnchorPoint = properties.AnchorPoint,
         Position = properties.Position,
         Size = UDim2.fromOffset(size, size),
-        FontFace = font(Enum.FontWeight.Bold),
+        Font = Enum.Font.GothamBold,
         TextSize = size - 2,
         Text = properties.Fallback or "",
     }, parent)
@@ -1004,7 +963,7 @@ function Components.icon(ctx, parent, properties)
     return fallback
 end
 
--- Icon button (gear, bell...). properties: Icon, Fallback, Size, OnClick
+-- Round icon button (gear, bell...). properties: Icon, Fallback, Size, OnClick
 function Components.iconButton(ctx, parent, properties)
     local size = properties.Size or 26
     local button = create("TextButton", {
@@ -1018,7 +977,7 @@ function Components.iconButton(ctx, parent, properties)
     local icon = Components.icon(ctx, button, {
         Name = properties.Icon,
         Fallback = properties.Fallback,
-        Size = size - 10,
+        Size = size - 8,
         Color = "SubText",
         AnchorPoint = Vector2.new(0.5, 0.5),
         Position = UDim2.fromScale(0.5, 0.5),
@@ -1027,9 +986,9 @@ function Components.iconButton(ctx, parent, properties)
     local function setHover(hovered)
         local color = ctx.Theme:Get(hovered and "Text" or "SubText")
         if icon:IsA("ImageLabel") then
-            tween(icon, { ImageColor3 = color }, 0.2)
+            icon.ImageColor3 = color
         else
-            tween(icon, { TextColor3 = color }, 0.2)
+            icon.TextColor3 = color
         end
     end
     ctx.Janitor:Connect(button.MouseEnter, function() setHover(true) end)
@@ -1042,8 +1001,7 @@ function Components.iconButton(ctx, parent, properties)
     return button
 end
 
--- On/off switch drawn like the v1 module toggle: a dim track and a round knob that takes the accent color.
--- properties: Value, OnChanged(state). Returns { Instance, Set(value, silent), Get() }
+-- On/off switch. properties: Value, OnChanged(state). Returns { Instance, Set(value, silent), Get() }
 function Components.switch(ctx, parent, properties)
     local state = properties.Value == true
 
@@ -1051,29 +1009,25 @@ function Components.switch(ctx, parent, properties)
         Name = "Switch",
         Text = "",
         AutoButtonColor = false,
-        BackgroundTransparency = 0.7,
         BorderSizePixel = 0,
-        Size = UDim2.fromOffset(30, 15),
+        Size = UDim2.fromOffset(25, 12),
     }, parent)
-    Components.corner(track, 8)
-    local knob = create("Frame", {
-        AnchorPoint = Vector2.new(0, 0.5),
-        BackgroundTransparency = 0.2,
-        Size = UDim2.fromOffset(15, 15),
-        BorderSizePixel = 0,
-    }, track)
-    Components.corner(knob, 8)
+    Components.corner(track, 6)
+    local outline = create("UIStroke", { Thickness = 0.8, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, track)
+    local knob = create("Frame", { AnchorPoint = Vector2.new(0, 0.5), Size = UDim2.fromOffset(12, 12), BorderSizePixel = 0 }, track)
+    Components.corner(knob, 6)
 
     local function paint(animate)
         local theme = ctx.Theme
         local accent = theme:Get("Accent")
-        local trackColor = state and accent or Color3.new(0, 0, 0)
-        local knobColor = state and accent or ctx.Mix(theme:Get("Stroke"), accent, 0.2)
-        local position = state and UDim2.new(1, -15, 0.5, 0) or UDim2.new(0, 0, 0.5, 0)
+        local trackColor = state and accent or ctx.Mix(theme:Get("Secondary"), theme:Get("Text"), 0.1)
+        local knobColor = state and Components.contrast(accent) or theme:Get("SubText")
+        local position = state and UDim2.new(1, -12, 0.5, 0) or UDim2.new(0, 0, 0.5, 0)
 
+        outline.Color = theme:Get("Stroke")
         if animate then
-            tween(track, { BackgroundColor3 = trackColor }, 0.4)
-            tween(knob, { Position = position, BackgroundColor3 = knobColor }, 0.4)
+            tween(track, { BackgroundColor3 = trackColor }, 0.12)
+            tween(knob, { Position = position, BackgroundColor3 = knobColor }, 0.12)
         else
             track.BackgroundColor3 = trackColor
             knob.Position = position
@@ -1109,40 +1063,39 @@ function Components.switch(ctx, parent, properties)
     return handle
 end
 
--- Slider with the v1 look: a thin accent track, a soft fill and a small knob.
--- properties: Min, Max, Step, Value, OnChanged(value), OnDone(value). Returns { Instance, Set(value, silent), Get() }
+-- Slider. properties: Min, Max, Step, Value, OnChanged(value), OnDone(value).
+-- Returns { Instance, Set(value, silent), Get() }
 function Components.slider(ctx, parent, properties)
     local minimum = properties.Min or 0
     local maximum = properties.Max or 100
     local step = properties.Step
     local value = math.clamp(properties.Value or minimum, minimum, maximum)
 
-    local holder = create("Frame", { Size = UDim2.new(1, 0, 0, 14), BackgroundTransparency = 1 }, parent)
+    local holder = create("Frame", { Size = UDim2.new(1, 0, 0, 16), BackgroundTransparency = 1 }, parent)
     local bar = create("Frame", {
         AnchorPoint = Vector2.new(0, 0.5),
         Position = UDim2.fromScale(0, 0.5),
         Size = UDim2.new(1, 0, 0, 4),
-        BackgroundTransparency = 0.9,
         BorderSizePixel = 0,
     }, holder)
     Components.corner(bar, 2)
-    local fill = create("Frame", { Size = UDim2.fromScale(0, 1), BackgroundTransparency = 0.5, BorderSizePixel = 0 }, bar)
+    local fill = create("Frame", { Size = UDim2.fromScale(0, 1), BorderSizePixel = 0 }, bar)
     Components.corner(fill, 2)
     local knob = create("Frame", {
         AnchorPoint = Vector2.new(0.5, 0.5),
-        Size = UDim2.fromOffset(8, 8),
+        Size = UDim2.fromOffset(12, 12),
         BorderSizePixel = 0,
     }, bar)
-    Components.corner(knob, 4)
+    Components.corner(knob, 6)
 
-    bind(ctx, bar, { BackgroundColor3 = "Accent" })
+    bind(ctx, bar, { BackgroundColor3 = "Stroke" })
     bind(ctx, fill, { BackgroundColor3 = "Accent" })
     bind(ctx, knob, { BackgroundColor3 = "Text" })
 
     local function render()
         local fraction = maximum == minimum and 0 or (value - minimum) / (maximum - minimum)
-        tween(fill, { Size = UDim2.fromScale(fraction, 1) }, 0.2)
-        tween(knob, { Position = UDim2.fromScale(fraction, 0.5) }, 0.2)
+        fill.Size = UDim2.fromScale(fraction, 1)
+        knob.Position = UDim2.fromScale(fraction, 0.5)
     end
     render()
 
@@ -1198,13 +1151,13 @@ end
 -- Row of options with one selected. properties: Options, Value, OnChanged(option)
 function Components.segmented(ctx, parent, properties)
     local frame = create("Frame", {
-        Size = UDim2.fromOffset(0, 22),
+        Size = UDim2.fromOffset(0, 24),
         AutomaticSize = Enum.AutomaticSize.X,
-        BackgroundTransparency = 0.9,
         BorderSizePixel = 0,
     }, parent)
-    Components.corner(frame, 4)
-    bind(ctx, frame, { BackgroundColor3 = "Accent" })
+    Components.corner(frame, 6)
+    bind(ctx, frame, { BackgroundColor3 = function(theme) return ctx.Mix(theme:Get("Secondary"), theme:Get("Text"), 0.06) end })
+    Components.stroke(ctx, frame)
     create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 2), SortOrder = Enum.SortOrder.LayoutOrder }, frame)
     create("UIPadding", { PaddingLeft = UDim.new(0, 2), PaddingRight = UDim.new(0, 2), PaddingTop = UDim.new(0, 2), PaddingBottom = UDim.new(0, 2) }, frame)
 
@@ -1215,25 +1168,24 @@ function Components.segmented(ctx, parent, properties)
         for option, button in pairs(buttons) do
             local selected = option == value
             local accent = ctx.Theme:Get("Accent")
-            button.BackgroundTransparency = selected and 0.7 or 1
+            button.BackgroundTransparency = selected and 0 or 1
             button.BackgroundColor3 = accent
-            button.TextColor3 = ctx.Theme:Get("Text")
-            button.TextTransparency = selected and 0.1 or 0.6
+            button.TextColor3 = selected and Components.contrast(accent) or ctx.Theme:Get("SubText")
         end
     end
 
     for index, option in ipairs(properties.Options) do
         local button = create("TextButton", {
             AutoButtonColor = false,
-            Size = UDim2.fromOffset(0, 18),
+            Size = UDim2.fromOffset(0, 20),
             AutomaticSize = Enum.AutomaticSize.X,
             BorderSizePixel = 0,
-            FontFace = font(),
-            TextSize = 10,
+            Font = Enum.Font.GothamMedium,
+            TextSize = 11,
             Text = tostring(option),
             LayoutOrder = index,
         }, frame)
-        Components.corner(button, 3)
+        Components.corner(button, 4)
         create("UIPadding", { PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10) }, button)
         buttons[option] = button
         ctx.Janitor:Connect(button.MouseButton1Click, function()
@@ -1257,41 +1209,39 @@ function Components.segmented(ctx, parent, properties)
     return handle
 end
 
--- Dropdown with the v1 look; the options open inside the same box. properties: Options, Value, OnChanged(option)
+-- Dropdown that opens below its header. properties: Options, Value, OnChanged(option)
 function Components.dropdown(ctx, parent, properties)
     local box = create("Frame", {
         Size = UDim2.new(1, 0, 0, 0),
         AutomaticSize = Enum.AutomaticSize.Y,
-        BackgroundTransparency = 0.9,
         BorderSizePixel = 0,
-        ClipsDescendants = true,
     }, parent)
-    Components.corner(box, 4)
-    bind(ctx, box, { BackgroundColor3 = "Accent" })
+    Components.corner(box, 8)
+    bind(ctx, box, { BackgroundColor3 = "Secondary" })
+    Components.stroke(ctx, box)
     create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder }, box)
 
     local header = create("TextButton", {
         Text = "",
         AutoButtonColor = false,
         BackgroundTransparency = 1,
-        Size = UDim2.new(1, 0, 0, 22),
+        Size = UDim2.new(1, 0, 0, 32),
         LayoutOrder = 1,
     }, box)
     local current = Components.label(ctx, header, {
-        Position = UDim2.new(0.05, 0, 0.5, 0),
-        AnchorPoint = Vector2.new(0, 0.5),
-        Size = UDim2.new(0.8, 0, 0, 13),
-        TextSize = 10,
-        TextTransparency = 0.2,
+        Position = UDim2.fromOffset(12, 0),
+        Size = UDim2.new(1, -36, 1, 0),
+        TextSize = 13,
         Text = tostring(properties.Value or ""),
     })
-    local arrow = create("ImageLabel", {
-        AnchorPoint = Vector2.new(0, 0.5),
-        Position = UDim2.fromScale(0.91, 0.5),
-        Size = UDim2.fromOffset(8, 8),
-        BackgroundTransparency = 1,
-        Image = arrowImage,
-    }, header)
+    local chevron = Components.label(ctx, header, {
+        AnchorPoint = Vector2.new(1, 0.5),
+        Position = UDim2.new(1, -12, 0.5, 0),
+        Size = UDim2.fromOffset(14, 14),
+        Font = Enum.Font.GothamBold,
+        TextSize = 11,
+        Text = "v",
+    }, "SubText")
 
     local list = create("Frame", {
         Size = UDim2.new(1, 0, 0, 0),
@@ -1301,46 +1251,40 @@ function Components.dropdown(ctx, parent, properties)
         LayoutOrder = 2,
     }, box)
     create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder }, list)
-    create("UIPadding", { PaddingLeft = UDim.new(0, 10), PaddingBottom = UDim.new(0, 4) }, list)
 
     local value = properties.Value
-    local optionLabels = {}
-
-    local function paintOptions()
-        for option, label in pairs(optionLabels) do
-            label.TextTransparency = option == value and 0.2 or 0.6
-        end
-    end
-
     local function setOpen(open)
         list.Visible = open
-        tween(arrow, { Rotation = open and 180 or 0 }, 0.3)
+        chevron.Text = open and "^" or "v"
     end
 
     for index, option in ipairs(properties.Options) do
         local item = create("TextButton", {
             AutoButtonColor = false,
             BackgroundTransparency = 1,
-            Size = UDim2.new(1, 0, 0, 16),
-            FontFace = font(),
-            TextSize = 10,
+            Size = UDim2.new(1, 0, 0, 28),
+            Font = Enum.Font.Gotham,
+            TextSize = 12,
             TextXAlignment = Enum.TextXAlignment.Left,
             Text = tostring(option),
             LayoutOrder = index,
         }, list)
-        bind(ctx, item, { TextColor3 = "Text" })
-        optionLabels[option] = item
+        create("UIPadding", { PaddingLeft = UDim.new(0, 12) }, item)
+        bind(ctx, item, { TextColor3 = function(theme) return theme:Get(option == value and "Accent" or "SubText") end })
         ctx.Janitor:Connect(item.MouseButton1Click, function()
             value = option
             current.Text = tostring(option)
-            paintOptions()
             setOpen(false)
+            for _, other in ipairs(list:GetChildren()) do
+                if other:IsA("TextButton") then
+                    other.TextColor3 = ctx.Theme:Get(other.Text == tostring(value) and "Accent" or "SubText")
+                end
+            end
             if properties.OnChanged then
                 properties.OnChanged(option)
             end
         end)
     end
-    paintOptions()
 
     ctx.Janitor:Connect(header.MouseButton1Click, function()
         setOpen(not list.Visible)
@@ -1350,27 +1294,28 @@ function Components.dropdown(ctx, parent, properties)
     function handle.Set(option)
         value = option
         current.Text = tostring(option)
-        paintOptions()
     end
     return handle
 end
 
--- Records a key, shown as a v1 keybind chip. Backspace or Escape clears it.
--- properties: Value (key name or nil), OnChanged(keyName or nil)
+-- Records a key. Backspace or Escape clears it. properties: Value (key name or nil), OnChanged(keyName or nil)
 function Components.keybind(ctx, parent, properties)
     local current = properties.Value
     local listening = false
 
     local button = create("TextButton", {
         AutoButtonColor = false,
-        BackgroundTransparency = 0.7,
         BorderSizePixel = 0,
-        Size = UDim2.fromOffset(72, 20),
-        FontFace = font(),
-        TextSize = 10,
+        Size = UDim2.fromOffset(84, 24),
+        Font = Enum.Font.GothamMedium,
+        TextSize = 11,
     }, parent)
-    Components.corner(button, 3)
-    bind(ctx, button, { BackgroundColor3 = "Accent", TextColor3 = "Text" })
+    Components.corner(button, 6)
+    bind(ctx, button, {
+        BackgroundColor3 = function(theme) return ctx.Mix(theme:Get("Secondary"), theme:Get("Text"), 0.06) end,
+        TextColor3 = "Text",
+    })
+    Components.stroke(ctx, button)
 
     local function show()
         button.Text = listening and "..." or (current or "None")
@@ -1418,34 +1363,29 @@ function Components.keybind(ctx, parent, properties)
     return handle
 end
 
--- Text button in the v1 style: a soft accent fill that becomes solid on hover. properties: Text, OnClick, Primary
+-- Text button. properties: Text, OnClick, Primary
 function Components.button(ctx, parent, properties)
     local button = create("TextButton", {
         AutoButtonColor = false,
         BorderSizePixel = 0,
-        Size = UDim2.new(1, 0, 0, 26),
-        FontFace = font(Enum.FontWeight.Bold),
+        Size = UDim2.new(1, 0, 0, 28),
+        Font = Enum.Font.GothamMedium,
         TextSize = 12,
         Text = properties.Text or "Button",
-        BackgroundTransparency = properties.Primary and 0 or 0.15,
     }, parent)
     Components.corner(button, 6)
     if properties.Primary then
         bind(ctx, button, {
             BackgroundColor3 = "Accent",
-            TextColor3 = function(theme) return contrast(theme:Get("Accent")) end,
+            TextColor3 = function(theme) return Components.contrast(theme:Get("Accent")) end,
         })
     else
-        bind(ctx, button, { BackgroundColor3 = "Accent", TextColor3 = "Text" })
-        Components.stroke(ctx, button, "Accent", 0.6)
+        bind(ctx, button, {
+            BackgroundColor3 = function(theme) return ctx.Mix(theme:Get("Secondary"), theme:Get("Text"), 0.06) end,
+            TextColor3 = "Text",
+        })
+        Components.stroke(ctx, button)
     end
-
-    ctx.Janitor:Connect(button.MouseEnter, function()
-        tween(button, { BackgroundTransparency = properties.Primary and 0.1 or 0 }, 0.2)
-    end)
-    ctx.Janitor:Connect(button.MouseLeave, function()
-        tween(button, { BackgroundTransparency = properties.Primary and 0 or 0.15 }, 0.2)
-    end)
     ctx.Janitor:Connect(button.MouseButton1Click, function()
         if properties.OnClick then
             properties.OnClick()
@@ -1486,10 +1426,8 @@ function Components.draggable(ctx, handle, target, onDrop)
     end)
 end
 
-return Components
-end)()
 
-modules.ColorPicker = (function()
+-- ========================================================================
 -- Lib/V2/ColorPicker.lua
 -- Expandable color picker: 2D saturation/value area, hue slider and a preview swatch.
 -- ColorPicker.new builds the picker itself, ColorPicker.row builds an Appearance row that expands to it.
@@ -1722,10 +1660,8 @@ function ColorPicker.row(ctx, parent, properties)
     return row
 end
 
-return ColorPicker
-end)()
 
-modules.Panels = (function()
+-- ========================================================================
 -- Lib/V2/Panels.lua
 -- The Settings panel (gear) and the Notification panel (bell). One implementation draws both:
 -- it reads the rows a feature reports (Feature:GetSettingsSchema / GetNotificationSchema), so a feature
@@ -1770,7 +1706,8 @@ function Panels.new(ctx, root)
         local header = create("Frame", { Size = UDim2.new(1, 0, 0, 26), BackgroundTransparency = 1, LayoutOrder = 1 }, line)
         local nameLabel = Components.label(rowCtx, header, {
             Size = UDim2.new(1, -110, 1, 0),
-            TextSize = 12,
+            Font = Enum.Font.GothamMedium,
+            TextSize = 13,
             Text = row.Name,
         })
 
@@ -1853,23 +1790,21 @@ function Panels.new(ctx, root)
             Active = true,
             AnchorPoint = Vector2.new(0.5, 0.5),
             Position = UDim2.fromScale(0.5, 0.5),
-            Size = UDim2.fromOffset(300, 0),
+            Size = UDim2.fromOffset(360, 0),
             AutomaticSize = Enum.AutomaticSize.Y,
             BorderSizePixel = 0,
-            ClipsDescendants = true,
             ZIndex = 51,
         }, scrim)
-        Components.corner(panel, 14)
+        Components.corner(panel, 12)
         Components.bind(panelCtx, panel, { BackgroundColor3 = "Secondary" })
-        panel.BackgroundTransparency = 0.02
-        Components.stroke(panelCtx, panel, "Stroke", 0.3)
-        create("UIPadding", { PaddingTop = UDim.new(0, 18), PaddingBottom = UDim.new(0, 16), PaddingLeft = UDim.new(0, 18), PaddingRight = UDim.new(0, 18) }, panel)
+        Components.stroke(panelCtx, panel)
+        create("UIPadding", { PaddingTop = UDim.new(0, 14), PaddingBottom = UDim.new(0, 14), PaddingLeft = UDim.new(0, 16), PaddingRight = UDim.new(0, 16) }, panel)
         create("UIListLayout", { Padding = UDim.new(0, 12), SortOrder = Enum.SortOrder.LayoutOrder }, panel)
 
         local header = create("Frame", { Size = UDim2.new(1, 0, 0, 34), BackgroundTransparency = 1, LayoutOrder = 1 }, panel)
         Components.label(panelCtx, header, {
             Size = UDim2.new(1, -40, 0, 18),
-            FontFace = Components.font(Enum.FontWeight.Bold),
+            Font = Enum.Font.GothamBold,
             TextSize = 15,
             Text = feature.Name,
         })
@@ -1885,27 +1820,17 @@ function Panels.new(ctx, root)
 
         local body = create("ScrollingFrame", {
             Size = UDim2.new(1, 0, 0, 0),
+            AutomaticSize = Enum.AutomaticSize.Y,
             AutomaticCanvasSize = Enum.AutomaticSize.Y,
             CanvasSize = UDim2.new(),
             ScrollBarThickness = 3,
             BackgroundTransparency = 1,
             BorderSizePixel = 0,
-            ClipsDescendants = true,
             LayoutOrder = 2,
         }, panel)
-        local bodyLayout = create("UIListLayout", { Padding = UDim.new(0, 12), SortOrder = Enum.SortOrder.LayoutOrder }, body)
+        create("UISizeConstraint", { MaxSize = Vector2.new(math.huge, 340) }, body)
+        create("UIListLayout", { Padding = UDim.new(0, 12), SortOrder = Enum.SortOrder.LayoutOrder }, body)
         create("UIPadding", { PaddingRight = UDim.new(0, 8) }, body)
-
-        -- The body is as tall as its rows, but never taller than the window leaves room for
-        -- (the header, the panel padding and a margin take 104): longer content scrolls.
-        local function getMaxBodyHeight()
-            local availableHeight = root.AbsoluteSize.Y / math.max(root:FindFirstChildOfClass("UIScale") and root:FindFirstChildOfClass("UIScale").Scale or 1, 0.01)
-            return math.max(120, math.min(availableHeight - 179, 300))
-        end
-        local function fitBody()
-            body.Size = UDim2.new(1, 0, 0, math.min(bodyLayout.AbsoluteContentSize.Y, getMaxBodyHeight()))
-        end
-        janitor:Connect(bodyLayout:GetPropertyChangedSignal("AbsoluteContentSize"), fitBody)
 
         local rowsJanitor = ctx.NewJanitor()
         janitor:Add(function()
@@ -1920,7 +1845,6 @@ function Panels.new(ctx, root)
                 end
             end
             build(body, Components.child(ctx, rowsJanitor))
-            fitBody()
         end
         render()
 
@@ -1971,10 +1895,8 @@ function Panels.new(ctx, root)
     return manager
 end
 
-return Panels
-end)()
 
-modules.FloatingButton = (function()
+-- ========================================================================
 -- Lib/V2/FloatingButton.lua
 -- A small draggable card that toggles one feature from anywhere on screen (the "Show Button" setting).
 -- Same idea as b/button.lua: title, one big ON/OFF button, drag to move. The position is saved in the v2 file.
@@ -2008,8 +1930,7 @@ function FloatingButton.new(ctx, feature, gui, index)
     }, gui)
     Components.corner(card, 10)
     Components.bind(buttonCtx, card, { BackgroundColor3 = "Secondary" })
-    card.BackgroundTransparency = 0.1
-    Components.stroke(buttonCtx, card, "Stroke", 0.3)
+    Components.stroke(buttonCtx, card)
 
     local saved = ctx.Store:Get("positions." .. feature.Id)
     if type(saved) == "table" and saved.XS and saved.XO and saved.YS and saved.YO then
@@ -2021,18 +1942,18 @@ function FloatingButton.new(ctx, feature, gui, index)
     Components.label(buttonCtx, card, {
         Position = UDim2.fromOffset(10, 8),
         Size = UDim2.new(1, -20, 0, 16),
-        FontFace = Components.font(Enum.FontWeight.Bold),
+        Font = Enum.Font.GothamBold,
         TextSize = 12,
         TextTruncate = Enum.TextTruncate.AtEnd,
         Text = feature.Name,
-    }, "Accent")
+    })
 
     local button = create("TextButton", {
         AutoButtonColor = false,
         Position = UDim2.fromOffset(10, 32),
         Size = UDim2.new(1, -20, 0, 40),
         BorderSizePixel = 0,
-        FontFace = Components.font(Enum.FontWeight.Bold),
+        Font = Enum.Font.GothamBold,
         TextSize = 14,
     }, card)
     Components.corner(button, 8)
@@ -2046,7 +1967,7 @@ function FloatingButton.new(ctx, feature, gui, index)
         else
             button.Text = "Toggle"
         end
-        button.BackgroundColor3 = state and accent or ctx.Mix(theme:Get("Secondary"), theme:Get("Stroke"), 0.5)
+        button.BackgroundColor3 = state and accent or ctx.Mix(theme:Get("Secondary"), theme:Get("Text"), 0.1)
         button.TextColor3 = state and Components.contrast(accent) or theme:Get("SubText")
     end
     paint()
@@ -2078,23 +1999,35 @@ function FloatingButton.new(ctx, feature, gui, index)
     return handle
 end
 
-return FloatingButton
-end)()
 
-modules.Window = (function()
+-- ========================================================================
+-- Lib/V2/Window.lua
+-- The UI v2 main window: topbar (name, version, search, minimize, close), sidebar, pages with feature cards,
+-- the Appearance section, floating buttons and the launcher. Feature logic lives in Feature.lua,
+-- widgets in Components.lua, so this file only arranges things.
+
 local Window = {}
 Window.__index = Window
 
 local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
-local TextService = game:GetService("TextService")
 local CoreGui = game:GetService("CoreGui")
 
-local windowWidth, windowHeight = 698, 479
-local collapsedWidth, collapsedHeight = 150, 40
-local sidebarWidth, dragBandHeight, contentTop = 164, 44, 40
-local logoImage = "rbxassetid://107819132007001"
+local windowWidth, windowHeight, topbarHeight, sidebarWidth = 698, 479, 48, 164
+
+local defaultCategories = {
+    { "Combat", "swords" },
+    { "Movement", "footprints" },
+    { "Visuals", "eye" },
+    { "Player", "user" },
+    { "World", "globe" },
+    { "Avatar", "shirt" },
+    { "Remotes", "radio" },
+    { "Teleports", "map-pin" },
+    { "Misc", "ellipsis" },
+    { "Scripts", "scroll-text" },
+    { "Config", "sliders-horizontal" },
+    { "GUI", "layout-dashboard" },
+}
 
 local colorRows = {
     { "Main Color", "MainColor" },
@@ -2120,16 +2053,10 @@ local function positionRecord(position)
     return { XS = position.X.Scale, XO = position.X.Offset, YS = position.Y.Scale, YO = position.Y.Offset }
 end
 
-local function textWidth(text, size, weight)
-    return TextService:GetTextSize(tostring(text), size, Enum.Font.GothamSemibold, Vector2.new(400, 40)).X
-end
-
--- options: Modules (defaults to the modules of this file), Theme, Store, Library (UI v1, optional: icons and
--- notifications), Title, Version, Categories (list of { name, lucide icon } or false), ToggleKey,
--- NotificationSoundId, Transparency (window background, default 0.15), Logo (image or false),
--- GalacticText (animated gradient on the name, default true), ButtonOpenMenu (floating launcher, default false)
+-- options: Modules, Theme, Store, Library (v1 library, optional: icons and notifications), Title, Version,
+-- Categories (list of { name, lucide icon } or false), ToggleKey, NotificationSoundId
 function Window.new(options)
-    local modules = options.Modules or modules
+    local modules = options.Modules
     local Components = modules.Components
     local create = Components.create
 
@@ -2148,8 +2075,7 @@ function Window.new(options)
     self._tabList = {}
     self._selected = nil
     self._destroyed = false
-    self._open = true
-    self._topControls = {}
+    self._minimized = false
     self.Theme = options.Theme
     self.Store = options.Store
 
@@ -2165,7 +2091,8 @@ function Window.new(options)
         NewJanitor = modules.Janitor.new,
         ApplyIcon = function(image, name)
             if library and library.ApplyIcon and name then
-                return library.ApplyIcon(image, name) == true
+                local ok, applied = pcall(library.ApplyIcon, image, name)
+                return ok and applied == true
             end
             return false
         end,
@@ -2180,219 +2107,254 @@ function Window.new(options)
         ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
     }, guiParent())
 
-    local camera = workspace.CurrentCamera
-    local viewport = camera and camera.ViewportSize or Vector2.new(1280, 720)
-
-    -- Match the original V1 scaling:
-    -- desktop stays at 1x, while touch/mobile scales from viewport width / 1400.
-    local function getWindowScale(viewportSize)
-        if UserInputService.TouchEnabled then
-            return viewportSize.X / 1400
-        end
-
-        return 1
+    -- Root. 698x479, corner 12, same frame as V1. Transparency follows GG.Transparency.
+    local gg = globalConfig()
+    local windowTransparency = gg.Transparency
+    if type(windowTransparency) ~= "number" then
+        windowTransparency = 0.15
     end
 
+    local camera = workspace.CurrentCamera
+    local viewport = camera and camera.ViewportSize or Vector2.new(1280, 720)
     local root = create("Frame", {
         Name = "Root",
         AnchorPoint = Vector2.new(0.5, 0.5),
-        Position = UDim2.fromScale(0.5, 0.5),
         Size = UDim2.fromOffset(windowWidth, windowHeight),
-        BackgroundTransparency = options.Transparency or 0.15,
+        BackgroundTransparency = windowTransparency,
         ClipsDescendants = true,
         BorderSizePixel = 0,
     }, self._gui)
     Components.corner(root, 12)
     Components.bind(ctx, root, { BackgroundColor3 = "MainColor" })
-    Components.stroke(ctx, root, "Stroke", 0.3)
-    self._scale = create("UIScale", { Scale = getWindowScale(viewport) }, root)
+    local rootStroke = Components.stroke(ctx, root)
+    rootStroke.Transparency = 0.3
+
+    local scaleX = (viewport.X - 24) / windowWidth
+    local scaleY = (viewport.Y - 24) / windowHeight
+    local windowScale = math.clamp(math.min(scaleX, scaleY), 0.35, 1)
+
+    create("UIScale", {
+        Scale = windowScale,
+    }, root)
+
     self._root = root
 
-    -- Keep the original V1 698 x 479 design size and use the same mobile scale as V1.
-    local function updateWindowScale()
-        local currentCamera = workspace.CurrentCamera
-        if currentCamera then
-            self._scale.Scale = getWindowScale(currentCamera.ViewportSize)
-        end
-    end
-    if camera then
-        self._janitor:Connect(camera:GetPropertyChangedSignal("ViewportSize"), updateWindowScale)
-    end
-    self._janitor:Connect(workspace:GetPropertyChangedSignal("CurrentCamera"), function()
-        local currentCamera = workspace.CurrentCamera
-        if currentCamera then
-            self._janitor:Connect(currentCamera:GetPropertyChangedSignal("ViewportSize"), updateWindowScale)
-            updateWindowScale()
-        end
-    end)
-
-    local savedPosition = options.Store:Get("window.Position")
-    if type(savedPosition) == "table" and savedPosition.XS then
-        root.Position = UDim2.new(savedPosition.XS, savedPosition.XO, savedPosition.YS, savedPosition.YO)
+    local saved = options.Store:Get("window.Position")
+    if type(saved) == "table" and saved.XS then
+        root.Position = UDim2.new(saved.XS, saved.XO, saved.YS, saved.YO)
     else
         root.Position = UDim2.fromScale(0.5, 0.5)
     end
 
     self._panels = modules.Panels.new(ctx, root)
 
-    -- Drag band across the top: grab it to move the window
-    local dragBand = create("Frame", { Name = "DragBand", Size = UDim2.new(1, 0, 0, dragBandHeight), BackgroundTransparency = 1, Active = true }, root)
-    Components.draggable(ctx, dragBand, root, function(position)
-        options.Store:Set("window.Position", positionRecord(position))
-    end)
-
-    local body = create("Frame", { Name = "Body", Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1 }, root)
-    self._body = body
-
-    -- Clicking the title bar (the logo and name area) switches between open and collapsed.
-    -- Moving the pointer more than a few pixels is a drag of the window, not a click.
-    local function isPress(input)
-        return input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch
-    end
-    local titlePress = nil
-    self._janitor:Connect(dragBand.InputBegan, function(input)
-        if not isPress(input) then
-            return
-        end
-        local localX = (input.Position.X - root.AbsolutePosition.X) / self._scale.Scale
-        if localX >= 0 and localX <= sidebarWidth then
-            titlePress = { position = input.Position, moved = false }
-        end
-    end)
-    self._janitor:Connect(UserInputService.InputChanged, function(input)
-        if titlePress and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-            if (input.Position - titlePress.position).Magnitude > 5 then
-                titlePress.moved = true
-            end
-        end
-    end)
-    self._janitor:Connect(UserInputService.InputEnded, function(input)
-        if titlePress and isPress(input) then
-            local press = titlePress
-            titlePress = nil
-            if not press.moved then
-                self:Toggle()
-            end
-        end
-    end)
-
-    -- Sidebar header: logo and the name
-    local nameX = 15
-    if options.Logo ~= false then
-        local logo = create("ImageLabel", {
-            AnchorPoint = Vector2.new(0, 0.5),
-            Position = UDim2.fromOffset(15, 26),
-            Size = UDim2.fromOffset(18, 18),
-            BackgroundTransparency = 1,
-            Image = options.Logo or logoImage,
-            ScaleType = Enum.ScaleType.Fit,
-        }, body)
-        Components.bind(ctx, logo, { ImageColor3 = "Accent" })
-        nameX = 43
-    end
-
-    local nameLabel = create("TextLabel", {
-        AnchorPoint = Vector2.new(0, 0.5),
-        Position = UDim2.fromOffset(nameX, 26),
-        Size = UDim2.fromOffset(sidebarWidth - nameX - 6, 18),
+    -- Sidebar (V1: title, tabs, info card, key hint). Width matches the V1 divider at ~164px.
+    local sidebar = create("Frame", {
+        Name = "Sidebar",
+        Size = UDim2.new(0, sidebarWidth, 1, 0),
         BackgroundTransparency = 1,
-        FontFace = Components.font(),
-        TextSize = 14,
-        TextXAlignment = Enum.TextXAlignment.Left,
-        TextColor3 = Color3.new(1, 1, 1),
-        Text = options.Title or "Sora x Hikaru",
-    }, body)
-    if options.GalacticText == false then
-        Components.bind(ctx, nameLabel, { TextColor3 = "Accent" })
-    else
-        local first, second = Color3.fromRGB(99, 102, 241), Color3.fromRGB(236, 72, 153)
+        BorderSizePixel = 0,
+    }, root)
+
+    local brand = create("Frame", {
+        Name = "Brand",
+        Active = true,
+        Position = UDim2.fromOffset(12, 8),
+        Size = UDim2.new(1, -20, 0, 32),
+        BackgroundTransparency = 1,
+    }, sidebar)
+    Components.icon(ctx, brand, {
+        Name = "sparkles",
+        Fallback = "S",
+        Size = 16,
+        Position = UDim2.fromOffset(0, 8),
+        Color = "Accent",
+    })
+
+    local titleText = options.Title or "Sora x Hikaru"
+    local versionText = options.Version or "v2.0"
+    if gg.GalacticText ~= false then
+        local title = create("TextLabel", {
+            Name = "ClientName",
+            BackgroundTransparency = 1,
+            Position = UDim2.fromOffset(22, 0),
+            Size = UDim2.new(1, -22, 0, 16),
+            Font = Enum.Font.GothamBold,
+            TextSize = 14,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextTruncate = Enum.TextTruncate.AtEnd,
+            TextColor3 = Color3.new(1, 1, 1),
+            Text = titleText,
+        }, brand)
+        local colorA = gg.GalacticColor1 or Color3.fromRGB(99, 102, 241)
+        local colorB = gg.GalacticColor2 or Color3.fromRGB(236, 72, 153)
         local gradient = create("UIGradient", {
             Color = ColorSequence.new({
-                ColorSequenceKeypoint.new(0, first),
-                ColorSequenceKeypoint.new(0.5, second),
-                ColorSequenceKeypoint.new(1, first),
+                ColorSequenceKeypoint.new(0, colorA),
+                ColorSequenceKeypoint.new(0.5, colorB),
+                ColorSequenceKeypoint.new(1, colorA),
             }),
-        }, nameLabel)
-        local offset = 0
-        self._janitor:Connect(RunService.Heartbeat, function(deltaTime)
-            offset = offset + deltaTime * 0.9
-            if offset > 1 then
-                offset = -1
+        }, title)
+        local speed = type(gg.GalacticSpeed) == "number" and gg.GalacticSpeed or 1.5
+        self._janitor:Add(task.spawn(function()
+            local offset = 0
+            while title.Parent do
+                offset = offset + 0.015 * speed
+                if offset > 1 then
+                    offset = -1
+                end
+                gradient.Offset = Vector2.new(offset, 0)
+                task.wait()
             end
-            gradient.Offset = Vector2.new(offset, 0)
-        end)
+        end))
+    else
+        Components.label(ctx, brand, {
+            Name = "ClientName",
+            Position = UDim2.fromOffset(22, 0),
+            Size = UDim2.new(1, -22, 0, 16),
+            Font = Enum.Font.GothamBold,
+            TextSize = 14,
+            TextTruncate = Enum.TextTruncate.AtEnd,
+            Text = titleText,
+        }, "Accent")
     end
+    Components.label(ctx, brand, {
+        Position = UDim2.fromOffset(22, 16),
+        Size = UDim2.new(1, -22, 0, 14),
+        TextSize = 11,
+        TextTruncate = Enum.TextTruncate.AtEnd,
+        Text = versionText,
+    }, "SubText")
 
-    local divider = create("Frame", { Position = UDim2.fromOffset(sidebarWidth, 0), Size = UDim2.new(0, 1, 1, 0), BackgroundTransparency = 0.5, BorderSizePixel = 0 }, body)
-    Components.bind(ctx, divider, { BackgroundColor3 = "Stroke" })
-
-    -- Tabs
     local nav = create("ScrollingFrame", {
-        Name = "Tabs",
-        Position = UDim2.fromOffset(10, 55),
-        Size = UDim2.fromOffset(sidebarWidth - 20, windowHeight - 149),
+        Name = "SidebarNav",
+        Position = UDim2.fromOffset(8, 52),
+        Size = UDim2.new(1, -14, 1, -132),
         BackgroundTransparency = 1,
         BorderSizePixel = 0,
         ScrollBarThickness = 0,
         AutomaticCanvasSize = Enum.AutomaticSize.Y,
         CanvasSize = UDim2.new(),
-    }, body)
+    }, sidebar)
     create("UIListLayout", { Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder }, nav)
     self._nav = nav
 
-    -- The pin slides to the selected tab
-    self._pin = create("Frame", { Position = UDim2.fromOffset(10, 66), Size = UDim2.fromOffset(2, 16), BorderSizePixel = 0, Visible = false, ZIndex = 3 }, body)
-    Components.corner(self._pin, 1)
-    Components.bind(ctx, self._pin, { BackgroundColor3 = "Accent" })
+    local info = create("Frame", {
+        Name = "InfoCard",
+        AnchorPoint = Vector2.new(0, 1),
+        Position = UDim2.new(0, 10, 1, -30),
+        Size = UDim2.new(1, -20, 0, 44),
+        BackgroundTransparency = 0.15,
+        BorderSizePixel = 0,
+    }, sidebar)
+    Components.corner(info, 9)
+    Components.bind(ctx, info, { BackgroundColor3 = "Secondary" })
+    local infoStroke = Components.stroke(ctx, info)
+    infoStroke.Transparency = 0.3
+    local dot = create("Frame", {
+        Size = UDim2.fromOffset(16, 16),
+        Position = UDim2.fromOffset(8, 14),
+        BorderSizePixel = 0,
+    }, info)
+    Components.corner(dot, 8)
+    Components.bind(ctx, dot, { BackgroundColor3 = "Accent" })
+    Components.label(ctx, dot, {
+        Size = UDim2.fromScale(1, 1),
+        Font = Enum.Font.GothamBold,
+        TextSize = 11,
+        TextXAlignment = Enum.TextXAlignment.Center,
+        Text = "i",
+    }, function(theme)
+        return Components.contrast(theme:Get("Accent"))
+    end)
+    Components.label(ctx, info, {
+        Position = UDim2.fromOffset(30, 8),
+        Size = UDim2.new(1, -38, 0, 14),
+        Font = Enum.Font.GothamMedium,
+        TextSize = 10,
+        TextTruncate = Enum.TextTruncate.AtEnd,
+        Text = titleText .. " " .. versionText,
+    })
+    Components.label(ctx, info, {
+        Position = UDim2.fromOffset(30, 23),
+        Size = UDim2.new(1, -38, 0, 12),
+        TextSize = 9,
+        TextTruncate = Enum.TextTruncate.AtEnd,
+        Text = "Have a good day!",
+    }, "SubText")
 
-    self:_buildInfoCard(body)
-
-    -- Pages
-    self._pages = create("Frame", {
-        Name = "Pages",
-        Position = UDim2.fromOffset(sidebarWidth + 1, contentTop),
-        Size = UDim2.new(1, -(sidebarWidth + 1), 1, -contentTop),
+    local hint = create("Frame", {
+        Name = "KeyHint",
+        AnchorPoint = Vector2.new(0, 1),
+        Position = UDim2.new(0, 10, 1, -8),
+        Size = UDim2.new(1, -20, 0, 18),
         BackgroundTransparency = 1,
-    }, body)
-
-    -- Search, minimize and close in the top right corner
-    local function circleButton(iconName, fallback, rightOffset, onClick)
-        local circle = create("Frame", {
-            AnchorPoint = Vector2.new(1, 0),
-            Position = UDim2.new(1, rightOffset, 0, 8),
-            Size = UDim2.fromOffset(26, 26),
-            BackgroundTransparency = 0.5,
-            BorderSizePixel = 0,
-        }, root)
-        Components.corner(circle, 13)
-        Components.bind(ctx, circle, { BackgroundColor3 = "Secondary" })
-        Components.stroke(ctx, circle, "Stroke", 0.5)
-        local button = Components.iconButton(ctx, circle, { Icon = iconName, Fallback = fallback, Size = 26, OnClick = onClick })
-        button.Position = UDim2.fromScale(0, 0)
-        return circle
+    }, sidebar)
+    create("UIListLayout", {
+        FillDirection = Enum.FillDirection.Horizontal,
+        VerticalAlignment = Enum.VerticalAlignment.Center,
+        Padding = UDim.new(0, 6),
+        SortOrder = Enum.SortOrder.LayoutOrder,
+    }, hint)
+    local toggleName = "Insert"
+    if typeof(self._toggleKey) == "EnumItem" then
+        toggleName = self._toggleKey.Name
+    elseif type(self._toggleKey) == "string" then
+        toggleName = self._toggleKey
     end
-    table.insert(self._topControls, circleButton("x", "x", -12, function() self:Hide() end))
-    table.insert(self._topControls, circleButton("minus", "-", -44, function() self:Minimize(true) end))
+    local chip = create("TextLabel", {
+        AutomaticSize = Enum.AutomaticSize.X,
+        Size = UDim2.fromOffset(0, 18),
+        BackgroundTransparency = 0.15,
+        BorderSizePixel = 0,
+        Font = Enum.Font.GothamMedium,
+        TextSize = 10,
+        Text = toggleName,
+    }, hint)
+    Components.corner(chip, 5)
+    create("UIPadding", { PaddingLeft = UDim.new(0, 6), PaddingRight = UDim.new(0, 6) }, chip)
+    Components.bind(ctx, chip, { BackgroundColor3 = "Secondary", TextColor3 = "Text" })
+    Components.label(ctx, hint, {
+        Size = UDim2.fromOffset(70, 18),
+        TextSize = 10,
+        Text = "to toggle",
+    }, "SubText")
 
-    local searchBox = create("Frame", {
-        AnchorPoint = Vector2.new(1, 0),
-        Position = UDim2.new(1, -78, 0, 8),
-        Size = UDim2.fromOffset(190, 26),
+    local divider = create("Frame", {
+        Name = "Divider",
+        Position = UDim2.fromOffset(sidebarWidth, 0),
+        Size = UDim2.new(0, 1, 1, 0),
         BackgroundTransparency = 0.5,
         BorderSizePixel = 0,
     }, root)
-    Components.corner(searchBox, 13)
+    Components.bind(ctx, divider, { BackgroundColor3 = "Stroke" })
+
+    -- Content header: search, minimize, close. Sits in the top 48px so minimize can clip to a bar.
+    local topbar = create("Frame", {
+        Name = "Topbar",
+        Active = true,
+        Position = UDim2.fromOffset(sidebarWidth + 1, 0),
+        Size = UDim2.new(1, -(sidebarWidth + 1), 0, topbarHeight),
+        BackgroundTransparency = 1,
+    }, root)
+
+    local searchBox = create("Frame", {
+        AnchorPoint = Vector2.new(0, 0.5),
+        Position = UDim2.new(0, 12, 0.5, 0),
+        Size = UDim2.fromOffset(200, 28),
+        BorderSizePixel = 0,
+    }, topbar)
+    Components.corner(searchBox, 8)
     Components.bind(ctx, searchBox, { BackgroundColor3 = "Secondary" })
-    Components.stroke(ctx, searchBox, "Stroke", 0.5)
-    table.insert(self._topControls, searchBox)
-    Components.icon(ctx, searchBox, { Name = "search", Fallback = "?", Size = 14, Position = UDim2.fromOffset(10, 6) })
+    Components.stroke(ctx, searchBox)
+    Components.icon(ctx, searchBox, { Name = "search", Fallback = "?", Size = 14, Position = UDim2.fromOffset(8, 7) })
     local searchInput = create("TextBox", {
-        Position = UDim2.fromOffset(30, 0),
-        Size = UDim2.new(1, -38, 1, 0),
+        Position = UDim2.fromOffset(28, 0),
+        Size = UDim2.new(1, -36, 1, 0),
         BackgroundTransparency = 1,
         ClearTextOnFocus = false,
-        FontFace = Components.font(),
-        TextSize = 11,
+        Font = Enum.Font.Gotham,
+        TextSize = 12,
         TextXAlignment = Enum.TextXAlignment.Left,
         PlaceholderText = "Search...",
         Text = "",
@@ -2402,62 +2364,64 @@ function Window.new(options)
         self:Search(searchInput.Text)
     end)
 
-    -- Optional floating launcher. Disabled by default; the configured toggle key remains available.
-    if options.ButtonOpenMenu == true then
-            self._launcher = create("TextButton", {
-            Name = "Launcher",
-            AutoButtonColor = false,
-            Text = "",
-            Size = UDim2.fromOffset(44, 44),
-            BackgroundTransparency = 0.15,
-            BorderSizePixel = 0,
-        }, self._gui)
-        Components.corner(self._launcher, 22)
-        Components.bind(ctx, self._launcher, { BackgroundColor3 = "Secondary" })
-        Components.stroke(ctx, self._launcher, "Accent", 0.3)
-        local launcherLogo = create("ImageLabel", {
-            AnchorPoint = Vector2.new(0.5, 0.5),
-            Position = UDim2.fromScale(0.5, 0.5),
-            Size = UDim2.fromOffset(24, 24),
-            BackgroundTransparency = 1,
-            Image = options.Logo or logoImage,
-            ScaleType = Enum.ScaleType.Fit,
-        }, self._launcher)
-        Components.bind(ctx, launcherLogo, { ImageColor3 = "Accent" })
+    local minimizeButton = Components.iconButton(ctx, topbar, {
+        Icon = "minus", Fallback = "-", Size = 28,
+        OnClick = function() self:Minimize(not self._minimized) end,
+    })
+    minimizeButton.AnchorPoint = Vector2.new(1, 0.5)
+    minimizeButton.Position = UDim2.new(1, -40, 0.5, 0)
+    local closeButton = Components.iconButton(ctx, topbar, { Icon = "x", Fallback = "x", Size = 28, OnClick = function() self:Hide() end })
+    closeButton.AnchorPoint = Vector2.new(1, 0.5)
+    closeButton.Position = UDim2.new(1, -8, 0.5, 0)
 
-        local launcherSaved = options.Store:Get("positions.launcher")
-        if type(launcherSaved) == "table" and launcherSaved.XS then
-            self._launcher.Position = UDim2.new(launcherSaved.XS, launcherSaved.XO, launcherSaved.YS, launcherSaved.YO)
-        else
-            self._launcher.Position = UDim2.new(0, 16, 0.5, -22)
-        end
-        Components.draggable(ctx, self._launcher, self._launcher, function(position)
-            options.Store:Set("positions.launcher", positionRecord(position))
-        end)
-
-        local launcherPress = nil
-        self._janitor:Connect(self._launcher.InputBegan, function(input)
-            if isPress(input) then
-                launcherPress = { position = input.Position, moved = false }
-            end
-        end)
-        self._janitor:Connect(UserInputService.InputChanged, function(input)
-            if launcherPress and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-                if (input.Position - launcherPress.position).Magnitude > 5 then
-                    launcherPress.moved = true
-                end
-            end
-        end)
-        self._janitor:Connect(UserInputService.InputEnded, function(input)
-            if launcherPress and isPress(input) then
-                local press = launcherPress
-                launcherPress = nil
-                if not press.moved then
-                    self:Toggle()
-                end
-            end
-        end)
+    local function rememberPosition(position)
+        options.Store:Set("window.Position", positionRecord(position))
     end
+    Components.draggable(ctx, topbar, root, rememberPosition)
+    Components.draggable(ctx, brand, root, rememberPosition)
+
+    local body = create("Frame", {
+        Name = "Body",
+        Position = UDim2.fromOffset(sidebarWidth + 1, topbarHeight),
+        Size = UDim2.new(1, -(sidebarWidth + 1), 1, -topbarHeight),
+        BackgroundTransparency = 1,
+    }, root)
+    self._body = body
+
+    self._pages = create("Frame", {
+        Name = "Pages",
+        Size = UDim2.fromScale(1, 1),
+        BackgroundTransparency = 1,
+    }, body)
+
+    -- Launcher: shown while the window is hidden (also the way back on devices without a keyboard)
+    self._launcher = create("TextButton", {
+        Name = "Launcher",
+        Visible = false,
+        AutoButtonColor = false,
+        Size = UDim2.fromOffset(44, 44),
+        BorderSizePixel = 0,
+        Font = Enum.Font.GothamBold,
+        TextSize = 12,
+        Text = "SxH",
+    }, self._gui)
+    Components.corner(self._launcher, 22)
+    Components.bind(ctx, self._launcher, {
+        BackgroundColor3 = "Accent",
+        TextColor3 = function(theme) return Components.contrast(theme:Get("Accent")) end,
+    })
+    local launcherSaved = options.Store:Get("positions.launcher")
+    if type(launcherSaved) == "table" and launcherSaved.XS then
+        self._launcher.Position = UDim2.new(launcherSaved.XS, launcherSaved.XO, launcherSaved.YS, launcherSaved.YO)
+    else
+        self._launcher.Position = UDim2.new(0, 16, 0.5, -22)
+    end
+    Components.draggable(ctx, self._launcher, self._launcher, function(position)
+        options.Store:Set("positions.launcher", positionRecord(position))
+    end)
+    self._janitor:Connect(self._launcher.MouseButton1Click, function()
+        self:Show()
+    end)
 
     -- Keybinds for features and the window toggle key. A recorded key or a focused textbox is ignored.
     self._janitor:Connect(UserInputService.InputBegan, function(input, processed)
@@ -2478,104 +2442,81 @@ function Window.new(options)
         end
     end)
 
-    -- No tabs are created for you: add them with Window:AddTab(name, icon).
-    -- Categories (optional) is a list of { name, icon } to create right away.
-    if type(options.Categories) == "table" then
-        for _, category in ipairs(options.Categories) do
+    -- Default navigation
+    local categories = options.Categories
+    if categories == nil then
+        categories = defaultCategories
+    end
+    if categories then
+        for _, category in ipairs(categories) do
             self:AddTab(category[1], category[2])
         end
+        if self._tabs.GUI then
+            self:_buildAppearance(self._tabs.GUI)
+        end
+        if self._tabs.Config then
+            self:_buildConfig(self._tabs.Config)
+        end
+    end
+    if self._tabList[1] then
+        self:SelectTab(self._tabList[1].Name)
     end
 
-    self._version = options.Version or "v2.0"
     return self
 end
 
--- Bottom of the sidebar: the name with the version, and the key that shows / hides the window
-function Window:_buildInfoCard(parent)
-    local Components = self._modules.Components
-    local create = Components.create
-    local ctx = self._ctx
-
-    local card = create("Frame", { Position = UDim2.fromOffset(10, 397), Size = UDim2.fromOffset(sidebarWidth - 20, 44), BackgroundTransparency = 0.15, BorderSizePixel = 0 }, parent)
-    Components.corner(card, 9)
-    Components.bind(ctx, card, { BackgroundColor3 = "Secondary" })
-    Components.stroke(ctx, card, "Stroke", 0.3)
-
-    local dot = create("Frame", { Position = UDim2.fromOffset(10, 14), Size = UDim2.fromOffset(16, 16), BorderSizePixel = 0 }, card)
-    Components.corner(dot, 8)
-    Components.bind(ctx, dot, { BackgroundColor3 = "Accent" })
-    local letter = Components.label(ctx, dot, { Size = UDim2.fromScale(1, 1), TextXAlignment = Enum.TextXAlignment.Center, FontFace = Components.font(Enum.FontWeight.Bold), TextSize = 11, Text = "i" })
-    Components.bind(ctx, letter, { TextColor3 = function(theme) return Components.contrast(theme:Get("Accent")) end })
-
-    self._infoTitle = Components.label(ctx, card, { Position = UDim2.fromOffset(34, 8), Size = UDim2.new(1, -40, 0, 14), TextSize = 10, TextTruncate = Enum.TextTruncate.AtEnd, Text = "Sora x Hikaru v2.0" })
-    Components.label(ctx, card, { Position = UDim2.fromOffset(34, 23), Size = UDim2.new(1, -40, 0, 12), TextSize = 9, TextTruncate = Enum.TextTruncate.AtEnd, Text = "Have a good day!" }, "SubText")
-
-    local keyName = self._toggleKey.Name
-    local keyWidth = textWidth(keyName, 10) + 14
-    local function chip(text, x, width)
-        local label = Components.label(ctx, parent, {
-            Position = UDim2.fromOffset(x, 452),
-            Size = UDim2.fromOffset(width, 18),
-            BackgroundTransparency = 0,
-            TextXAlignment = Enum.TextXAlignment.Center,
-            TextSize = 10,
-            Text = text,
-        })
-        Components.corner(label, 5)
-        Components.bind(ctx, label, { BackgroundColor3 = "Secondary" })
-        return label
-    end
-    chip("*", 14, 18)
-    chip(keyName, 36, keyWidth)
-    Components.label(ctx, parent, { Position = UDim2.fromOffset(36 + keyWidth + 6, 452), Size = UDim2.fromOffset(70, 18), Text = "to toggle UI" }, "SubText")
-end
+-- Notifications -----------------------------------------------------
 
 function Window:Notify(title, text, duration, sound)
     local library = self._library
+    local notificationType = "info"
+    if text == "Enabled" then
+        notificationType = "success"
+    elseif text == "Disabled" then
+        notificationType = "warning"
+    end
     if library and library.Notify and library.Notify.Send then
-        library.Notify.Send({ title = title, text = text, duration = duration, type = "info" })
+        pcall(library.Notify.Send, { title = title, text = text, duration = duration, type = notificationType })
     else
         print("[Sora x Hikaru] " .. tostring(title) .. ": " .. tostring(text))
     end
 
     if sound and self._soundId then
-        local clip = Instance.new("Sound")
-        clip.SoundId = self._soundId
-        clip.Volume = 0.5
-        clip.Parent = game:GetService("SoundService")
-        clip.Ended:Once(function()
-            clip:Destroy()
+        pcall(function()
+            local clip = Instance.new("Sound")
+            clip.SoundId = self._soundId
+            clip.Volume = 0.5
+            clip.Parent = game:GetService("SoundService")
+            clip.Ended:Once(function()
+                clip:Destroy()
+            end)
+            clip:Play()
         end)
-        clip:Play()
     end
 end
 
 -- Tabs ----------------------------------------------------------------
 
-function Window:_movePin()
-    local tab = self._selected
-    if not tab or not self._pin.Parent or not self._open then
-        return
-    end
-    local y = (tab.Button.AbsolutePosition.Y - self._root.AbsolutePosition.Y) / self._scale.Scale + 11
-    self._pin.Visible = true
-    self._modules.Components.tween(self._pin, { Position = UDim2.fromOffset(10, y) }, 0.4)
-end
-
 function Window:_paintTabs()
     local theme = self.Theme
     for _, tab in ipairs(self._tabList) do
         local selected = tab == self._selected
-        tab.Button.BackgroundTransparency = selected and 0.5 or 1
+        tab.Button.BackgroundTransparency = selected and 0.45 or (tab.Hovered and 0.72 or 1)
         tab.Button.BackgroundColor3 = theme:Get("Secondary")
+        tab.Bar.Visible = selected
         tab.Label.TextColor3 = theme:Get(selected and "Accent" or "Text")
-        tab.Label.TextTransparency = selected and 0.2 or 0.7
+        tab.Label.TextTransparency = selected and 0.15 or 0.55
+        if tab.Gradient then
+            tab.Gradient.Offset = selected and Vector2.new(1, 0) or Vector2.new(0, 0)
+        end
+        local iconColor = theme:Get(selected and "Accent" or "Text")
+        local iconTransparency = selected and 0.15 or 0.6
         if tab.Icon:IsA("ImageLabel") then
-            tab.Icon.ImageColor3 = theme:Get(selected and "Accent" or "Text")
-            tab.Icon.ImageTransparency = selected and 0.2 or 0.8
+            tab.Icon.ImageColor3 = iconColor
+            tab.Icon.ImageTransparency = iconTransparency
         else
-            tab.Icon.TextColor3 = theme:Get(selected and "Accent" or "Text")
-            tab.Icon.TextTransparency = selected and 0.2 or 0.8
+            tab.Icon.TextColor3 = iconColor
+            tab.Icon.TextTransparency = iconTransparency
         end
     end
 end
@@ -2590,11 +2531,6 @@ function Window:SelectTab(name)
         other.Page.Visible = other == tab
     end
     self:_paintTabs()
-    task.defer(function()
-        if not self._destroyed then
-            self:_movePin()
-        end
-    end)
     return true
 end
 
@@ -2617,54 +2553,76 @@ function Window:AddTab(name, icon)
         LayoutOrder = #self._tabList + 1,
     }, self._nav)
     Components.corner(button, 5)
-    local tabIcon = Components.icon(ctx, button, { Name = icon, Fallback = string.sub(name, 1, 1), Size = 14, Position = UDim2.new(0.1, 0, 0.5, -7) })
+    local bar = create("Frame", { AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 0, 0.5, 0), Size = UDim2.fromOffset(2, 16), BorderSizePixel = 0, Visible = false }, button)
+    Components.corner(bar, 1)
+    Components.bind(ctx, bar, { BackgroundColor3 = "Accent" })
+    local tabIcon = Components.icon(ctx, button, { Name = icon, Fallback = string.sub(name, 1, 1), Size = 12, Position = UDim2.fromOffset(10, 13) })
     local label = Components.label(ctx, button, {
-        Position = UDim2.new(0.24, 0, 0, 0),
-        Size = UDim2.new(0.74, 0, 1, 0),
+        Position = UDim2.fromOffset(28, 0),
+        Size = UDim2.new(1, -34, 1, 0),
+        Font = Enum.Font.GothamMedium,
         TextSize = 13,
-        TextTruncate = Enum.TextTruncate.AtEnd,
         Text = name,
-    })
+    }, "SubText")
+    local gradient = create("UIGradient", {
+        Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
+            ColorSequenceKeypoint.new(0.7, Color3.fromRGB(155, 155, 155)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(58, 58, 58)),
+        }),
+    }, label)
 
     local page = create("ScrollingFrame", {
         Name = "Page",
         Size = UDim2.fromScale(1, 1),
         BackgroundTransparency = 1,
         BorderSizePixel = 0,
-        ScrollBarThickness = 0,
+        ScrollBarThickness = 3,
         AutomaticCanvasSize = Enum.AutomaticSize.Y,
         CanvasSize = UDim2.new(),
         Visible = false,
     }, self._pages)
-    create("UIPadding", { PaddingTop = UDim.new(0, 6), PaddingBottom = UDim.new(0, 14), PaddingLeft = UDim.new(0, 20), PaddingRight = UDim.new(0, 20) }, page)
+    create("UIPadding", { PaddingTop = UDim.new(0, 12), PaddingBottom = UDim.new(0, 12), PaddingLeft = UDim.new(0, 12), PaddingRight = UDim.new(0, 12) }, page)
 
     local columnsFrame = create("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1 }, page)
     create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 11), SortOrder = Enum.SortOrder.LayoutOrder }, columnsFrame)
     local columns = {}
     for order = 1, 2 do
-        local column = create("Frame", { Size = UDim2.new(0.5, -5.5, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, LayoutOrder = order }, columnsFrame)
+        local column = create("Frame", { Size = UDim2.new(0.5, -6, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, LayoutOrder = order }, columnsFrame)
         create("UIListLayout", { Padding = UDim.new(0, 11), SortOrder = Enum.SortOrder.LayoutOrder }, column)
         columns[order] = column
     end
 
-    local empty = Components.label(ctx, page, { Size = UDim2.new(1, 0, 0, 30), TextSize = 12, Text = "No features here yet." }, "SubText")
+    local empty = Components.label(ctx, page, { Size = UDim2.new(1, 0, 0, 30), TextSize = 13, Text = "No features here yet." }, "SubText")
 
     local tab = {
         Name = name,
         Button = button,
+        Bar = bar,
         Icon = tabIcon,
         Label = label,
+        Gradient = gradient,
+        Hovered = false,
         Page = page,
         Columns = columns,
         CardCount = { 0, 0 },
         Empty = empty,
-        Window = self,
     }
     self._tabs[name] = tab
     table.insert(self._tabList, tab)
 
     self._janitor:Connect(button.MouseButton1Click, function()
         self:SelectTab(name)
+    end)
+    self._janitor:Connect(button.MouseEnter, function()
+        tab.Hovered = true
+        if self._selected ~= tab then
+            button.BackgroundTransparency = 0.72
+        end
+    end)
+    self._janitor:Connect(button.MouseLeave, function()
+        tab.Hovered = false
+        self:_paintTabs()
     end)
     -- Registered after the widgets above so the selected look wins when the theme changes
     self._janitor:Add(self.Theme:Subscribe(function()
@@ -2675,17 +2633,8 @@ function Window:AddTab(name, icon)
     function tab:AddFeature(def)
         return self.Window:_addFeatureCard(self, def)
     end
+    tab.Window = self
 
-    -- A tab you name GUI gets the Appearance section, one named Config gets the configuration buttons
-    if name == "GUI" then
-        self:_buildAppearance(tab)
-    elseif name == "Config" then
-        self:_buildConfig(tab)
-    end
-
-    if not self._selected then
-        self:SelectTab(name)
-    end
     return tab
 end
 
@@ -2780,23 +2729,23 @@ function Window:_newFeature(def, parentId)
         self._router:Unregister(feature)
     end)
     self._janitor:Add(feature:Subscribe(function(eventName, settingId)
-        if (eventName == "setting" and settingId == "ShowButton") or eventName == "reset" then
+        if eventName == "setting" and settingId == "ShowButton" or eventName == "reset" then
             self:_syncFloating(feature)
         end
     end))
     return feature
 end
 
--- Gear, bell and the main switch of one feature, left to right inside `parent`
+-- Gear, bell and the main switch for one feature. Returns the switch.
 function Window:_addControls(parent, cardCtx, feature)
     local Components = self._modules.Components
     local panels = self._panels
 
     if feature.HasSettingsButton then
-        Components.iconButton(cardCtx, parent, { Icon = "settings", Fallback = "G", Size = 24, OnClick = function() panels.OpenSettings(feature) end })
+        Components.iconButton(cardCtx, parent, { Icon = "settings", Fallback = "G", Size = 28, OnClick = function() panels.OpenSettings(feature) end })
     end
     if feature.HasNotificationButton then
-        Components.iconButton(cardCtx, parent, { Icon = "bell", Fallback = "N", Size = 24, OnClick = function() panels.OpenNotifications(feature) end })
+        Components.iconButton(cardCtx, parent, { Icon = "bell", Fallback = "N", Size = 28, OnClick = function() panels.OpenNotifications(feature) end })
     end
 
     local switch = Components.switch(cardCtx, parent, {
@@ -2819,63 +2768,6 @@ function Window:_activate(feature)
     feature:Start()
 end
 
-local function hasKeybindRow(feature)
-    for _, row in ipairs(feature:GetSettingsSchema()) do
-        if row.Id == "Keybind" then
-            return true
-        end
-    end
-    return false
-end
-
--- Header and divider of a card in the UI v1 module style. Returns the card frame and its body.
-function Window:_cardFrame(tab, column, title, description, cardCtx)
-    local Components = self._modules.Components
-    local create = Components.create
-
-    local frame = create("Frame", {
-        Name = "FeatureCard",
-        Size = UDim2.new(1, 0, 0, 0),
-        AutomaticSize = Enum.AutomaticSize.Y,
-        BackgroundTransparency = 0.5,
-        BorderSizePixel = 0,
-        ClipsDescendants = true,
-    }, tab.Columns[column])
-    Components.corner(frame, 5)
-    Components.bind(cardCtx, frame, { BackgroundColor3 = "Secondary" })
-    Components.stroke(cardCtx, frame, "Stroke", 0.5)
-    create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder }, frame)
-
-    local hasDescription = description ~= nil and description ~= ""
-    local header = create("Frame", { Size = UDim2.new(1, 0, 0, hasDescription and 56 or 38), BackgroundTransparency = 1, LayoutOrder = 1 }, frame)
-    Components.label(cardCtx, header, {
-        Position = UDim2.fromOffset(17, hasDescription and 10 or 11),
-        Size = UDim2.new(1, -34, 0, 16),
-        TextSize = 13,
-        TextTransparency = 0.2,
-        TextTruncate = Enum.TextTruncate.AtEnd,
-        Text = title,
-    }, "Accent")
-    if hasDescription then
-        Components.label(cardCtx, header, {
-            Position = UDim2.fromOffset(17, 30),
-            Size = UDim2.new(1, -34, 0, 14),
-            TextSize = 10,
-            TextTransparency = 0.3,
-            TextTruncate = Enum.TextTruncate.AtEnd,
-            Text = description,
-        }, "Accent")
-    end
-
-    local line = create("Frame", { Size = UDim2.new(1, 0, 0, 1), BackgroundTransparency = 0.5, BorderSizePixel = 0, LayoutOrder = 2 }, frame)
-    Components.bind(cardCtx, line, { BackgroundColor3 = "Stroke" })
-
-    local body = create("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, Visible = false, LayoutOrder = 4 }, frame)
-    create("UIPadding", { PaddingTop = UDim.new(0, 8), PaddingBottom = UDim.new(0, 10), PaddingLeft = UDim.new(0, 17), PaddingRight = UDim.new(0, 17) }, body)
-    create("UIListLayout", { Padding = UDim.new(0, 5), SortOrder = Enum.SortOrder.LayoutOrder }, body)
-    return frame, body
-end
-
 function Window:_addFeatureCard(tab, def)
     local Components = self._modules.Components
     local create = Components.create
@@ -2894,72 +2786,127 @@ function Window:_addFeatureCard(tab, def)
     tab.CardCount[columnIndex] = tab.CardCount[columnIndex] + 1
     tab.Empty.Visible = false
 
-    local frame, body = self:_cardFrame(tab, columnIndex, feature.Name, feature.Description, cardCtx)
+    local frame = create("Frame", {
+        Name = "FeatureCard",
+        Active = true,
+        Size = UDim2.new(1, 0, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        BackgroundTransparency = 0.45,
+        BorderSizePixel = 0,
+    }, tab.Columns[columnIndex])
+    Components.corner(frame, 5)
+    Components.bind(cardCtx, frame, { BackgroundColor3 = "Secondary" })
+    local cardStroke = Components.stroke(cardCtx, frame)
+    cardStroke.Transparency = 0.5
+    create("UIPadding", { PaddingTop = UDim.new(0, 10), PaddingBottom = UDim.new(0, 10), PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10) }, frame)
+    create("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder }, frame)
     table.insert(self._cards, { Frame = frame, Tab = tab, Text = string.lower(feature.Name .. " " .. feature.Description) })
 
-    -- Control row: the keybind chip on the left, gear / bell / switch on the right
-    local controlRow = create("Frame", { Size = UDim2.new(1, 0, 0, 37), BackgroundTransparency = 1, LayoutOrder = 3 }, frame)
-
-    if hasKeybindRow(feature) then
-        local chip = create("TextButton", {
-            AnchorPoint = Vector2.new(0, 0.5),
-            Position = UDim2.new(0, 17, 0.5, 0),
-            Size = UDim2.fromOffset(33, 15),
-            AutoButtonColor = false,
-            BackgroundTransparency = 0.7,
-            BorderSizePixel = 0,
-            FontFace = Components.font(),
+    local title = Components.label(cardCtx, frame, {
+        Name = "ModuleName",
+        Size = UDim2.new(1, 0, 0, 16),
+        Font = Enum.Font.GothamBold,
+        TextSize = 13,
+        Text = feature.Name,
+    }, "Accent")
+    title.TextTransparency = 0.15
+    title.LayoutOrder = 1
+    if feature.Description ~= "" then
+        local description = Components.label(cardCtx, frame, {
+            Name = "Description",
+            Size = UDim2.new(1, 0, 0, 0),
+            AutomaticSize = Enum.AutomaticSize.Y,
+            TextWrapped = true,
+            TextYAlignment = Enum.TextYAlignment.Top,
             TextSize = 10,
-        }, controlRow)
-        Components.corner(chip, 3)
-        Components.bind(cardCtx, chip, { BackgroundColor3 = "Accent", TextColor3 = "Text" })
-        local function showKey()
-            local keyName = feature:GetSetting("Keybind") or "None"
-            chip.Text = keyName
-            chip.Size = UDim2.fromOffset(math.max(33, textWidth(keyName, 10) + 10), 15)
-        end
-        showKey()
-        janitor:Add(feature:Subscribe(function(eventName)
-            if eventName == "setting" or eventName == "reset" then
-                showKey()
-            end
-        end))
-        janitor:Connect(chip.MouseButton1Click, function()
-            self._panels.OpenSettings(feature)
-        end)
+            Text = feature.Description,
+        }, "SubText")
+        description.TextTransparency = 0.25
+        description.LayoutOrder = 2
     end
 
-    local cluster = create("Frame", {
-        AnchorPoint = Vector2.new(1, 0.5),
-        Position = UDim2.new(1, -14, 0.5, 0),
-        Size = UDim2.fromOffset(0, 24),
-        AutomaticSize = Enum.AutomaticSize.X,
-        BackgroundTransparency = 1,
-    }, controlRow)
-    create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, VerticalAlignment = Enum.VerticalAlignment.Center, HorizontalAlignment = Enum.HorizontalAlignment.Right, Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder }, cluster)
-    self:_addControls(cluster, cardCtx, feature)
+    local rule = create("Frame", {
+        Name = "Divider",
+        Size = UDim2.new(1, 0, 0, 1),
+        BackgroundTransparency = 0.5,
+        BorderSizePixel = 0,
+        LayoutOrder = 3,
+    }, frame)
+    Components.bind(cardCtx, rule, { BackgroundColor3 = "Stroke" })
 
-    local card = { Feature = feature, Frame = frame, Content = body, Window = self }
+    local controlRow = create("Frame", { Size = UDim2.new(1, 0, 0, 22), BackgroundTransparency = 1, LayoutOrder = 4 }, frame)
+    local keyButton = create("TextButton", {
+        Name = "Keybind",
+        AutoButtonColor = false,
+        AnchorPoint = Vector2.new(0, 0.5),
+        Position = UDim2.new(0, 0, 0.5, 0),
+        Size = UDim2.fromOffset(0, 16),
+        AutomaticSize = Enum.AutomaticSize.X,
+        BackgroundTransparency = 0.35,
+        BorderSizePixel = 0,
+        Font = Enum.Font.GothamMedium,
+        TextSize = 10,
+        Text = feature:GetSetting("Keybind") or "None",
+    }, controlRow)
+    Components.corner(keyButton, 3)
+    create("UIPadding", { PaddingLeft = UDim.new(0, 6), PaddingRight = UDim.new(0, 6) }, keyButton)
+    Components.bind(cardCtx, keyButton, {
+        BackgroundColor3 = "Accent",
+        TextColor3 = function(theme)
+            return Components.contrast(theme:Get("Accent"))
+        end,
+    })
+    cardCtx.Janitor:Connect(keyButton.MouseButton1Click, function()
+        if feature.HasSettingsButton then
+            self._panels.OpenSettings(feature)
+        end
+    end)
+
+    local right = create("Frame", { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, 0, 0.5, 0), Size = UDim2.fromOffset(0, 22), AutomaticSize = Enum.AutomaticSize.X, BackgroundTransparency = 1 }, controlRow)
+    create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, VerticalAlignment = Enum.VerticalAlignment.Center, HorizontalAlignment = Enum.HorizontalAlignment.Right, Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }, right)
+    if feature.HasSettingsButton then
+        Components.iconButton(cardCtx, right, { Icon = "settings", Fallback = "G", Size = 22, OnClick = function() self._panels.OpenSettings(feature) end })
+    end
+    if feature.HasNotificationButton then
+        Components.iconButton(cardCtx, right, { Icon = "bell", Fallback = "N", Size = 22, OnClick = function() self._panels.OpenNotifications(feature) end })
+    end
+    local switch = Components.switch(cardCtx, right, {
+        Value = feature:GetState(),
+        OnChanged = function(state)
+            feature:SetState(state, "toggle")
+        end,
+    })
+    janitor:Add(feature:Subscribe(function(eventName, payload)
+        if eventName == "state" then
+            switch.Set(payload, true)
+        elseif eventName == "reset" or (eventName == "setting" and payload == "Keybind") then
+            keyButton.Text = feature:GetSetting("Keybind") or "None"
+        end
+    end))
+
+    local content = create("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, LayoutOrder = 5 }, frame)
+    create("UIListLayout", { Padding = UDim.new(0, 10), SortOrder = Enum.SortOrder.LayoutOrder }, content)
+
+    local card = { Feature = feature, Frame = frame, Content = content }
     local rowCount = 0
 
-    local function nextRow()
+    local function nextOrder()
         rowCount = rowCount + 1
-        body.Visible = true
         return rowCount
     end
 
     local function controlId(settings)
-        return sanitize(settings.Id or (feature.Id .. "_" .. (settings.Name or "control")))
+        return settings.Id or sanitize(feature.Id .. "_" .. (settings.Name or "control"))
     end
 
     -- Another feature inside the card: name on the left, gear / bell / switch on the right
     function card:AddToggle(subDef)
         local sub = self.Window:_newFeature(subDef, feature.Id)
-        local row = create("Frame", { Size = UDim2.new(1, 0, 0, 24), BackgroundTransparency = 1, LayoutOrder = nextRow() }, body)
-        Components.label(cardCtx, row, { Size = UDim2.new(1, -120, 1, 0), TextTransparency = 0.2, Text = sub.Name })
-        local subCluster = create("Frame", { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, 0, 0.5, 0), Size = UDim2.fromOffset(0, 24), AutomaticSize = Enum.AutomaticSize.X, BackgroundTransparency = 1 }, row)
-        create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, VerticalAlignment = Enum.VerticalAlignment.Center, HorizontalAlignment = Enum.HorizontalAlignment.Right, Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }, subCluster)
-        self.Window:_addControls(subCluster, cardCtx, sub)
+        local row = create("Frame", { Size = UDim2.new(1, 0, 0, 28), BackgroundTransparency = 1, LayoutOrder = nextOrder() }, content)
+        Components.label(cardCtx, row, { Size = UDim2.new(1, -120, 1, 0), TextSize = 13, Text = sub.Name })
+        local cluster = create("Frame", { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, 0, 0.5, 0), Size = UDim2.fromOffset(0, 28), AutomaticSize = Enum.AutomaticSize.X, BackgroundTransparency = 1 }, row)
+        create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, VerticalAlignment = Enum.VerticalAlignment.Center, HorizontalAlignment = Enum.HorizontalAlignment.Right, Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }, cluster)
+        self.Window:_addControls(cluster, cardCtx, sub)
         table.insert(self.Window._cards, { Frame = row, Tab = tab, Text = string.lower(sub.Name .. " " .. sub.Description .. " " .. feature.Name) })
         self.Window:_activate(sub)
         return sub
@@ -2971,11 +2918,11 @@ function Window:_addFeatureCard(tab, def)
         local savedValue = self.Window.Store:Get("controls." .. id)
         local start = type(savedValue) == "number" and savedValue or settings.Default or settings.Min or 0
 
-        local row = create("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, LayoutOrder = nextRow() }, body)
-        create("UIListLayout", { Padding = UDim.new(0, 3), SortOrder = Enum.SortOrder.LayoutOrder }, row)
-        local top = create("Frame", { Size = UDim2.new(1, 0, 0, 13), BackgroundTransparency = 1, LayoutOrder = 1 }, row)
-        Components.label(cardCtx, top, { Size = UDim2.new(1, -60, 1, 0), TextTransparency = 0.2, Text = settings.Name })
-        local valueLabel = Components.label(cardCtx, top, { AnchorPoint = Vector2.new(1, 0), Position = UDim2.fromScale(1, 0), Size = UDim2.fromOffset(60, 13), TextSize = 10, TextXAlignment = Enum.TextXAlignment.Right, TextTransparency = 0.2, Text = tostring(start) })
+        local row = create("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, LayoutOrder = nextOrder() }, content)
+        create("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }, row)
+        local top = create("Frame", { Size = UDim2.new(1, 0, 0, 18), BackgroundTransparency = 1, LayoutOrder = 1 }, row)
+        Components.label(cardCtx, top, { Size = UDim2.new(1, -60, 1, 0), TextSize = 13, Text = settings.Name })
+        local valueLabel = Components.label(cardCtx, top, { AnchorPoint = Vector2.new(1, 0), Position = UDim2.fromScale(1, 0), Size = UDim2.fromOffset(60, 18), TextXAlignment = Enum.TextXAlignment.Right, Text = tostring(start) }, "SubText")
         local slider = Components.slider(cardCtx, row, {
             Min = settings.Min or 0,
             Max = settings.Max or 100,
@@ -2984,7 +2931,7 @@ function Window:_addFeatureCard(tab, def)
             OnChanged = function(value)
                 valueLabel.Text = tostring(value)
                 if settings.Callback then
-                    settings.Callback(value)
+                    pcall(settings.Callback, value)
                 end
             end,
             OnDone = function(value)
@@ -2994,7 +2941,7 @@ function Window:_addFeatureCard(tab, def)
         slider.Instance.LayoutOrder = 2
         table.insert(self.Window._cards, { Frame = row, Tab = tab, Text = string.lower(settings.Name .. " " .. feature.Name) })
         if settings.Callback then
-            settings.Callback(slider.Get())
+            pcall(settings.Callback, slider.Get())
         end
         return slider
     end
@@ -3010,94 +2957,107 @@ function Window:_addFeatureCard(tab, def)
             end
         end
 
-        local row = create("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, LayoutOrder = nextRow() }, body)
-        create("UIListLayout", { Padding = UDim.new(0, 4), SortOrder = Enum.SortOrder.LayoutOrder }, row)
-        Components.label(cardCtx, row, { Size = UDim2.new(1, 0, 0, 13), TextTransparency = 0.2, Text = settings.Name }).LayoutOrder = 1
+        local row = create("Frame", { Size = UDim2.new(1, 0, 0, 0), AutomaticSize = Enum.AutomaticSize.Y, BackgroundTransparency = 1, LayoutOrder = nextOrder() }, content)
+        create("UIListLayout", { Padding = UDim.new(0, 6), SortOrder = Enum.SortOrder.LayoutOrder }, row)
+        Components.label(cardCtx, row, { Size = UDim2.new(1, 0, 0, 18), TextSize = 13, Text = settings.Name }).LayoutOrder = 1
         local dropdown = Components.dropdown(cardCtx, row, {
             Options = settings.Options,
             Value = start,
             OnChanged = function(option)
                 self.Window.Store:Set("controls." .. id, option)
                 if settings.Callback then
-                    settings.Callback(option)
+                    pcall(settings.Callback, option)
                 end
             end,
         })
         dropdown.Instance.LayoutOrder = 2
         table.insert(self.Window._cards, { Frame = row, Tab = tab, Text = string.lower(settings.Name .. " " .. feature.Name) })
         if settings.Callback then
-            settings.Callback(start)
+            pcall(settings.Callback, start)
         end
         return dropdown
     end
 
     function card:AddButton(settings)
-        local button = Components.button(cardCtx, body, {
+        local button = Components.button(cardCtx, content, {
             Text = settings.Name,
             OnClick = function()
                 if settings.Callback then
-                    settings.Callback()
+                    local ok, err = pcall(settings.Callback)
+                    if not ok then
+                        warn("[Sora x Hikaru] button '" .. tostring(settings.Name) .. "' failed: " .. tostring(err))
+                    end
                 end
             end,
         })
-        button.LayoutOrder = nextRow()
+        button.LayoutOrder = nextOrder()
         return button
     end
 
     function card:AddText(settings)
-        local label = Components.label(cardCtx, body, {
+        local label = Components.label(cardCtx, content, {
             Size = UDim2.new(1, 0, 0, 0),
             AutomaticSize = Enum.AutomaticSize.Y,
             TextWrapped = true,
             TextYAlignment = Enum.TextYAlignment.Top,
-            TextSize = 10,
             Text = settings.Text or settings.Name or "",
         }, "SubText")
-        label.LayoutOrder = nextRow()
+        label.LayoutOrder = nextOrder()
         return label
     end
 
     function card:AddDivider()
-        local line = create("Frame", { Size = UDim2.new(1, 0, 0, 1), BackgroundTransparency = 0.5, BorderSizePixel = 0, LayoutOrder = nextRow() }, body)
+        local line = create("Frame", { Size = UDim2.new(1, 0, 0, 1), BorderSizePixel = 0, LayoutOrder = nextOrder() }, content)
         Components.bind(cardCtx, line, { BackgroundColor3 = "Stroke" })
         return line
     end
 
+    card.Window = self
     self:_activate(feature)
     return card
 end
 
 -- Built-in sections ---------------------------------------------------
 
--- A plain card (not a feature) with the same look. Returns its body.
+-- A plain card (not a feature) with a colored title
 function Window:_plainCard(tab, titleText, column)
-    local cardCtx = self._ctx
-    local frame, body = self:_cardFrame(tab, column or 1, titleText, nil, cardCtx)
-    body.Visible = true
+    local Components = self._modules.Components
+    local create = Components.create
+    local ctx = self._ctx
+
+    local frame = create("Frame", {
+        Name = "FeatureCard",
+        Size = UDim2.new(1, 0, 0, 0),
+        AutomaticSize = Enum.AutomaticSize.Y,
+        BackgroundTransparency = 0.45,
+        BorderSizePixel = 0,
+    }, tab.Columns[column or 1])
+    Components.corner(frame, 5)
+    Components.bind(ctx, frame, { BackgroundColor3 = "Secondary" })
+    local cardStroke = Components.stroke(ctx, frame)
+    cardStroke.Transparency = 0.5
+    create("UIPadding", { PaddingTop = UDim.new(0, 10), PaddingBottom = UDim.new(0, 10), PaddingLeft = UDim.new(0, 10), PaddingRight = UDim.new(0, 10) }, frame)
+    create("UIListLayout", { Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder }, frame)
+    Components.label(ctx, frame, { Size = UDim2.new(1, 0, 0, 16), Font = Enum.Font.GothamBold, TextSize = 13, Text = titleText }, "Accent").LayoutOrder = 1
     tab.Empty.Visible = false
     table.insert(self._cards, { Frame = frame, Tab = tab, Text = string.lower(titleText) })
-    return body
+    return frame
 end
 
 -- Appearance: the six theme colors, each expands to a color picker; changes repaint everything at once
 function Window:_buildAppearance(tab)
     local Components = self._modules.Components
     local ctx = self._ctx
-    local body = self:_plainCard(tab, "Appearance", 1)
+    local frame = self:_plainCard(tab, "Appearance", 1)
 
     for index, entry in ipairs(colorRows) do
-        local row = self._modules.ColorPicker.row(ctx, body, { Name = entry[1], Key = entry[2] })
-        row.LayoutOrder = index
+        local row = self._modules.ColorPicker.row(ctx, frame, { Name = entry[1], Key = entry[2] })
+        row.LayoutOrder = index + 1
     end
 
-    local order = #colorRows + 1
-    local presetNames = {}
+    local order = #colorRows + 2
     for name in pairs(self._modules.Theme.Presets) do
-        table.insert(presetNames, name)
-    end
-    table.sort(presetNames)
-    for _, name in ipairs(presetNames) do
-        local button = Components.button(ctx, body, {
+        local button = Components.button(ctx, frame, {
             Text = "Preset: " .. name,
             OnClick = function()
                 self.Theme:SetPreset(name)
@@ -3106,23 +3066,23 @@ function Window:_buildAppearance(tab)
         button.LayoutOrder = order
         order = order + 1
     end
-    local reset = Components.button(ctx, body, { Text = "Reset colors", Primary = true, OnClick = function() self.Theme:Reset() end })
+    local reset = Components.button(ctx, frame, { Text = "Reset colors", Primary = true, OnClick = function() self.Theme:Reset() end })
     reset.LayoutOrder = order
 end
 
 function Window:_buildConfig(tab)
     local Components = self._modules.Components
     local ctx = self._ctx
-    local body = self:_plainCard(tab, "Configuration", 1)
+    local frame = self:_plainCard(tab, "Configuration", 1)
 
-    Components.button(ctx, body, {
+    Components.button(ctx, frame, {
         Text = "Save now",
         OnClick = function()
             local saved = self.Store:Flush()
             self:Notify("Configuration", saved and "Saved." or "Could not write the file.", 2, false)
         end,
-    }).LayoutOrder = 1
-    Components.button(ctx, body, {
+    }).LayoutOrder = 2
+    Components.button(ctx, frame, {
         Text = "Reset every feature's settings",
         OnClick = function()
             for _, feature in pairs(self._features) do
@@ -3131,63 +3091,36 @@ function Window:_buildConfig(tab)
             end
             self:Notify("Configuration", "All feature settings were reset.", 2, false)
         end,
-    }).LayoutOrder = 2
+    }).LayoutOrder = 3
 end
 
 -- Window state -----------------------------------------------------------
 
-function Window:IsOpen()
-    return self._open
-end
-
--- The one place that changes the state. The title bar, the floating button, the toggle key and the
--- top right buttons all end up here: open is 698 x 479, collapsed is 150 x 40.
-function Window:SetOpen(state)
-    state = state == true
-    if state == self._open then
-        return
-    end
-    self._open = state
-
-    if not state then
-        self._panels.Close()
-        for _, control in ipairs(self._topControls) do
-            control.Visible = false
-        end
-    end
-
-    local goal = state and UDim2.fromOffset(windowWidth, windowHeight) or UDim2.fromOffset(collapsedWidth, collapsedHeight)
-    local tween = TweenService:Create(self._root, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), { Size = goal })
-    tween:Play()
-
-    if state then
-        -- the top right controls are anchored to the window edge: show them once it is full size again
-        tween.Completed:Once(function()
-            if self._open and not self._destroyed then
-                for _, control in ipairs(self._topControls) do
-                    control.Visible = true
-                end
-                self:_movePin()
-            end
-        end)
-    end
-end
-
 function Window:Show()
-    self:SetOpen(true)
+    self._root.Visible = true
+    self._launcher.Visible = false
 end
 
 function Window:Hide()
-    self:SetOpen(false)
+    self._panels.Close()
+    self._root.Visible = false
+    self._launcher.Visible = true
 end
 
 function Window:Toggle()
-    self:SetOpen(not self._open)
+    if self._root.Visible then
+        self:Hide()
+    else
+        self:Show()
+    end
 end
 
--- Minimize(true) collapses, Minimize(false) opens
 function Window:Minimize(state)
-    self:SetOpen(state ~= true)
+    self._minimized = state == true
+    self._body.Visible = not self._minimized
+    self._modules.Components.tween(self._root, {
+        Size = UDim2.fromOffset(windowWidth, self._minimized and topbarHeight or windowHeight),
+    }, 0.2)
 end
 
 -- Removes every widget, connection, subscription and floating button, then saves
@@ -3211,10 +3144,8 @@ function Window:Destroy()
     self.Store:Destroy()
 end
 
-return Window
-end)()
 
-modules.Compat = (function()
+-- ========================================================================
 -- Lib/V2/Compat.lua
 -- Lets code written for UI v1 run on v2: window:create_tab(title, icon):create_module{...} becomes a feature card and
 -- create_checkbox / create_slider / create_dropdown / create_button / create_divider / create_paragraph / create_text
@@ -3309,45 +3240,66 @@ function Compat.apply(window)
     end
 end
 
-return Compat
-end)()
 
-local function globalConfig()
-    local env = (getgenv and getgenv()) or _G
-    return env.GG or {}
-end
+-- ============================================================================
+-- Init
 
-local V2 = { Version = "v2.0" }
+local Init = {}
+Init.Version = "v2.0"
 
--- Opens the saved settings file, builds the theme and the window
-function V2.new(options)
+-- options: Library (UI v1, optional), Folder, Preset, Title, Version, Categories,
+-- ToggleKey, NotificationSoundId
+-- Preset defaults to "Sora" (the V1 dark palette) unless GG.Theme names another preset.
+function Init.new(options)
     options = options or {}
     local gg = globalConfig()
 
-    local folder = options.Folder or gg.FolderName or "SoraHikaru"
-    local store = modules.Store.new({ Path = folder .. "/v2.json" })
-    local theme = modules.Theme.new({ Store = store, Preset = options.Preset })
+    local modules = {
+        Janitor = Janitor,
+        Store = Store,
+        Theme = Theme,
+        Feature = Feature,
+        Components = Components,
+        ColorPicker = ColorPicker,
+        Panels = Panels,
+        FloatingButton = FloatingButton,
+        Window = Window,
+        Compat = Compat,
+    }
 
-    local window = modules.Window.new({
+    local folder = options.Folder or gg.FolderName or "SoraHikaru"
+    local preset = options.Preset
+    if preset == nil then
+        if gg.Theme == "Light" or gg.Theme == "Pure Black" or gg.Theme == "Midnight" or gg.Theme == "Sora" then
+            preset = gg.Theme
+        else
+            preset = "Sora"
+        end
+    end
+
+    local store = Store.new({
+        Path = folder .. "/v2.json",
+    })
+
+    local theme = Theme.new({
+        Store = store,
+        Preset = preset,
+    })
+
+    local window = Window.new({
+        Modules = modules,
         Theme = theme,
         Store = store,
         Library = options.Library,
         Title = options.Title or gg.UIName,
-        Version = options.Version or V2.Version,
+        Version = options.Version or Init.Version,
         Categories = options.Categories,
         ToggleKey = options.ToggleKey or gg.ToggleKey,
         NotificationSoundId = options.NotificationSoundId,
-        Transparency = options.Transparency or gg.Transparency,
-        Logo = options.Logo,
-        GalacticText = options.GalacticText,
-        ButtonOpenMenu = options.ButtonOpenMenu == true,
     })
-    modules.Compat.apply(window)
+
+    Compat.apply(window)
     return window
 end
 
-for name, module in pairs(modules) do
-    V2[name] = module
-end
-
-return V2
+return Init
