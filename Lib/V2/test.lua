@@ -3153,3 +3153,113 @@ end
 
 	return self
 end
+
+-- Winds UI test harness
+-- Appended to the library so it can access the local Library table.
+
+local testLibrary = Library.new()
+testLibrary:load()
+
+local generalTab = testLibrary:create_tab("General", "rbxassetid://0")
+local settingsTab = testLibrary:create_tab("Settings", "rbxassetid://0")
+
+local componentModule = generalTab:create_module({
+    title = "Component Test",
+    description = "Preview the available UI components",
+    section = "left",
+    flag = "winds_test_module",
+    callback = function(isOpen)
+        print("[Winds UI Test] Component module:", isOpen and "Opened" or "Closed")
+    end
+})
+
+componentModule:create_paragraph({
+    title = "Welcome",
+    text = "This is a test window for checking the Winds UI components."
+})
+
+componentModule:create_checkbox({
+    title = "Checkbox Test",
+    flag = "winds_test_checkbox",
+    callback = function(enabled)
+        print("[Winds UI Test] Checkbox:", enabled)
+    end
+})
+
+componentModule:create_slider({
+    title = "Slider Test",
+    flag = "winds_test_slider",
+    minimum_value = 0,
+    maximum_value = 100,
+    value = 50,
+    round_number = true,
+    callback = function(value)
+        print("[Winds UI Test] Slider:", value)
+    end
+})
+
+componentModule:create_dropdown({
+    title = "Dropdown Test",
+    flag = "winds_test_dropdown",
+    options = {"Option A", "Option B", "Option C"},
+    maximum_options = 3,
+    callback = function(option)
+        print("[Winds UI Test] Dropdown:", option)
+    end
+})
+
+componentModule:create_textbox({
+    title = "Textbox Test",
+    flag = "winds_test_textbox",
+    placeholder = "Type something...",
+    callback = function(value)
+        print("[Winds UI Test] Textbox:", value)
+    end
+})
+
+componentModule:create_feature({
+    title = "Feature Toggle Test",
+    flag = "winds_test_feature",
+    callback = function(enabled)
+        print("[Winds UI Test] Feature:", enabled)
+    end,
+    button_callback = function()
+        print("[Winds UI Test] Feature action clicked")
+    end
+})
+
+componentModule:change_state(true)
+
+local settingsModule = settingsTab:create_module({
+    title = "Library Settings",
+    description = "Basic secondary-tab test",
+    section = "left",
+    flag = "winds_test_settings_module",
+    callback = function(isOpen)
+        print("[Winds UI Test] Settings module:", isOpen and "Opened" or "Closed")
+    end
+})
+
+settingsModule:create_paragraph({
+    title = "Navigation Test",
+    text = "Switch between General and Settings to test tab navigation."
+})
+
+settingsModule:create_checkbox({
+    title = "Second Tab Checkbox",
+    flag = "winds_test_second_checkbox",
+    callback = function(enabled)
+        print("[Winds UI Test] Second tab checkbox:", enabled)
+    end
+})
+
+settingsModule:change_state(true)
+
+Library.SendNotification({
+    title = "Winds UI",
+    text = "Test interface loaded successfully",
+    duration = 4,
+    icon = "rbxassetid://117707949657765"
+})
+
+print("[Winds UI Test] Initialization complete. Press RightControl to hide/show the UI.")
