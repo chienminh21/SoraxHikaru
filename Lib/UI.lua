@@ -1143,6 +1143,212 @@ local function contrastText(color)
     return brightness > 0.6 and Color3.fromRGB(12, 13, 15) or Color3.fromRGB(255, 255, 255)
 end
 
+-- Floating cards ---------------------------------------------------------
+-- A small draggable card with a title and one big button (the idea of b/button.lua). Its position is saved in the
+-- config file. Used by the "Show Button" setting of a module and by Library.CreateMiniToggle.
+-- It lives in its own ScreenGui, so it stays visible while the window is collapsed.
+local function getFloatingGui()
+    if Library._floating_gui and Library._floating_gui.Parent then
+        return Library._floating_gui
+    end
+    Library._floating_gui = mk('ScreenGui', {
+        Name = GUI_NAME .. '_Floating',
+        ResetOnSpawn = false,
+        IgnoreGuiInset = true,
+        DisplayOrder = 450,
+        ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+    }, getGuiParent())
+    return Library._floating_gui
+end
+
+-- options: { flag, title, onClick }. Returns { frame, button, connections }.
+-- To remove it: disconnect every connection and destroy the frame.
+local function createFloatingCard(options)
+    Library._config._library = Library._config._library or {}
+    local positions = Library._config._library.positions
+    if type(positions) ~= 'table' then
+        positions = {}
+        Library._config._library.positions = positions
+    end
+
+    Library._floating_count = (Library._floating_count or 0) + 1
+    local index = Library._floating_count
+    local camera = workspace.CurrentCamera
+    local screen = camera and camera.ViewportSize or Vector2.new(1280, 720)
+
+    local frame = mk('Frame', {
+        Name = 'FloatingButton',
+        Active = true,
+        Size = UDim2.fromOffset(150, 85),
+        BackgroundColor3 = CurrentTheme.ModuleBackground,
+        BackgroundTransparency = 0.1,
+        BorderSizePixel = 0,
+    }, getFloatingGui())
+    mk('UICorner', { CornerRadius = UDim.new(0, 10) }, frame)
+    mk('UIStroke', { Color = CurrentTheme.Stroke, Transparency = 0.3, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, frame)
+
+    local saved = positions[options.flag]
+    if type(saved) == 'table' and saved.XS and saved.XO and saved.YS and saved.YO then
+        -- keep a saved position on screen
+        local x = math.clamp(saved.XS * screen.X + saved.XO, 0, math.max(screen.X - 150, 0))
+        local y = math.clamp(saved.YS * screen.Y + saved.YO, 0, math.max(screen.Y - 85, 0))
+        frame.Position = UDim2.fromOffset(x, y)
+    else
+        frame.Position = UDim2.new(0.5, -75 + (index - 1) * 12, 0.75, (index - 1) * 95)
+    end
+
+    mk('TextLabel', {
+        Name = 'FloatingTitle',
+        Position = UDim2.fromOffset(10, 8),
+        Size = UDim2.new(1, -20, 0, 16),
+        BackgroundTransparency = 1,
+        Font = Enum.Font.GothamBold,
+        TextSize = 12,
+        TextColor3 = CurrentTheme.Accent,
+        TextXAlignment = Enum.TextXAlignment.Left,
+        TextTruncate = Enum.TextTruncate.AtEnd,
+        Text = options.title or 'Toggle',
+    }, frame)
+    local button = mk('TextButton', {
+        Name = 'FloatingToggle',
+        AutoButtonColor = false,
+        Position = UDim2.fromOffset(10, 32),
+        Size = UDim2.new(1, -20, 0, 40),
+        BorderSizePixel = 0,
+        Font = Enum.Font.GothamBold,
+        TextSize = 14,
+        Text = '',
+    }, frame)
+    mk('UICorner', { CornerRadius = UDim.new(0, 8) }, button)
+
+    local connections = {}
+    table.insert(connections, button.MouseButton1Click:Connect(options.onClick))
+
+    -- Drag by the card; the position is saved when the drag ends
+    local dragStart, startPosition = nil, nil
+    local function isPress(input)
+        return input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch
+    end
+    table.insert(connections, frame.InputBegan:Connect(function(input)
+        if isPress(input) then
+            dragStart = input.Position
+            startPosition = frame.Position
+        end
+    end))
+    table.insert(connections, UserInputService.InputChanged:Connect(function(input)
+        if dragStart and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            frame.Position = UDim2.new(
+                startPosition.X.Scale, startPosition.X.Offset + delta.X,
+                startPosition.Y.Scale, startPosition.Y.Offset + delta.Y
+            )
+        end
+    end))
+    table.insert(connections, UserInputService.InputEnded:Connect(function(input)
+        if dragStart and isPress(input) then
+            dragStart = nil
+            positions[options.flag] = {
+                XS = frame.Position.X.Scale,
+                XO = frame.Position.X.Offset,
+                YS = frame.Position.Y.Scale,
+                YO = frame.Position.Y.Offset,
+            }
+            Config:save(game.GameId, Library._config)
+        end
+    end))
+
+    return { frame = frame, button = button, connections = connections }
+end
+
+-- Mini toggle: a small floating toggle you can drag anywhere. Its position and its state are saved.
+--   Library.CreateMiniToggle({ title = "Manual Spam", flag = "mini_spam", default = false,
+--                              keybind = Enum.KeyCode.X, callback = function(state) end })
+-- Returns { Set(state), Get(), Toggle(), SetTitle(text), Show(), Hide(), Destroy() }.
+-- The callback runs once at creation (with the saved state) and then on every change.
+function Library.CreateMiniToggle(settings)
+    settings = settings or {}
+    local flag = settings.flag or settings.title or 'mini_toggle'
+    local saved = Library._config._flags[flag]
+    local state = type(saved) == 'boolean' and saved or settings.default == true
+    local manager = {}
+    local card
+
+    local function paint()
+        card.button.Text = state and 'ON' or 'OFF'
+        card.button.BackgroundColor3 = state and CurrentTheme.Accent or CurrentTheme.Card
+        card.button.TextColor3 = state and contrastText(CurrentTheme.Accent) or CurrentTheme.TextSecondary
+    end
+
+    card = createFloatingCard({
+        flag = flag,
+        title = settings.title or 'Toggle',
+        onClick = function()
+            manager:Set(not state)
+        end,
+    })
+
+    if typeof(settings.keybind) == 'EnumItem' then
+        table.insert(card.connections, UserInputService.InputBegan:Connect(function(input, processed)
+            if not processed and input.KeyCode == settings.keybind then
+                manager:Set(not state)
+            end
+        end))
+    end
+
+    table.insert(Library._theme_hooks, paint)
+    paint()
+
+    function manager:Set(value)
+        value = value == true
+        if value == state then
+            return
+        end
+        state = value
+        Library._config._flags[flag] = state
+        Config:save(game.GameId, Library._config)
+        paint()
+        if settings.callback then
+            settings.callback(state)
+        end
+    end
+
+    function manager:Get()
+        return state
+    end
+
+    function manager:Toggle()
+        manager:Set(not state)
+    end
+
+    function manager:SetTitle(text)
+        card.frame.FloatingTitle.Text = tostring(text)
+    end
+
+    function manager:Show()
+        card.frame.Visible = true
+    end
+
+    function manager:Hide()
+        card.frame.Visible = false
+    end
+
+    function manager:Destroy()
+        for _, connection in ipairs(card.connections) do
+            connection:Disconnect()
+        end
+        local position = table.find(Library._theme_hooks, paint)
+        if position then
+            table.remove(Library._theme_hooks, position)
+        end
+        card.frame:Destroy()
+    end
+
+    if settings.callback then
+        settings.callback(state)
+    end
+    return manager
+end
+
 --  Notification 
 local Notify = {}
 local MAX_VISIBLE = 5
@@ -3108,6 +3314,11 @@ function Library:create_ui()
         openSearch(query)
     end
 
+    -- Window:create_mini_toggle({ ... }) is Library.CreateMiniToggle
+    function self:create_mini_toggle(settings)
+        return Library.CreateMiniToggle(settings)
+    end
+
     function self:Update1Run(a)
         if a == "nil" then
             Container.BackgroundTransparency = 0.05
@@ -3725,21 +3936,6 @@ function Library:create_ui()
         TweenService:Create(CardScale, TweenInfo.new(0.25, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), { Scale = panelScale }):Play()
     end
 
-    -- Floating buttons (the "Show Button" setting) live in their own ScreenGui so they stay visible when the window is hidden
-    local function getFloatingGui()
-        if Library._floating_gui and Library._floating_gui.Parent then
-            return Library._floating_gui
-        end
-        Library._floating_gui = mk('ScreenGui', {
-            Name = GUI_NAME .. '_Floating',
-            ResetOnSpawn = false,
-            IgnoreGuiInset = true,
-            DisplayOrder = 450,
-            ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-        }, getGuiParent())
-        return Library._floating_gui
-    end
-
     function self:create_tab(title: string, icon: string)
         local TabManager = {}
         local window = self
@@ -4232,7 +4428,8 @@ function Library:create_ui()
 
                 -- Keep enough room for layout padding and the last control.
                 local measuredHeight = contentY + 20
-                local fallbackHeight = trackedHeight + 20
+                -- open dropdowns are counted in _multiplier, an open color picker in _size
+                local fallbackHeight = trackedHeight + (ModuleManager._multiplier or 0) + 20
 
                 return math.max(measuredHeight, fallbackHeight)
             end
@@ -4499,102 +4696,14 @@ function Library:create_ui()
             ModuleManager._status_hook = paintFloating
 
             local function createFloating()
-                Library._config._library = Library._config._library or {}
-                local positions = Library._config._library.positions
-                if type(positions) ~= 'table' then
-                    positions = {}
-                    Library._config._library.positions = positions
-                end
-
-                Library._floating_count = (Library._floating_count or 0) + 1
-                local index = Library._floating_count
-                local camera = workspace.CurrentCamera
-                local screen = camera and camera.ViewportSize or Vector2.new(1280, 720)
-
-                local frame = mk('Frame', {
-                    Name = 'FloatingButton',
-                    Active = true,
-                    Size = UDim2.fromOffset(150, 85),
-                    BackgroundColor3 = CurrentTheme.ModuleBackground,
-                    BackgroundTransparency = 0.1,
-                    BorderSizePixel = 0,
-                }, getFloatingGui())
-                mk('UICorner', { CornerRadius = UDim.new(0, 10) }, frame)
-                mk('UIStroke', { Color = CurrentTheme.Stroke, Transparency = 0.3, ApplyStrokeMode = Enum.ApplyStrokeMode.Border }, frame)
-
-                local saved = positions[settings.flag]
-                if type(saved) == 'table' and saved.XS and saved.XO and saved.YS and saved.YO then
-                    -- keep a saved position on screen
-                    local x = math.clamp(saved.XS * screen.X + saved.XO, 0, math.max(screen.X - 150, 0))
-                    local y = math.clamp(saved.YS * screen.Y + saved.YO, 0, math.max(screen.Y - 85, 0))
-                    frame.Position = UDim2.fromOffset(x, y)
-                else
-                    frame.Position = UDim2.new(0.5, -75 + (index - 1) * 12, 0.75, (index - 1) * 95)
-                end
-
-                mk('TextLabel', {
-                    Name = 'FloatingTitle',
-                    Position = UDim2.fromOffset(10, 8),
-                    Size = UDim2.new(1, -20, 0, 16),
-                    BackgroundTransparency = 1,
-                    Font = Enum.Font.GothamBold,
-                    TextSize = 12,
-                    TextColor3 = CurrentTheme.Accent,
-                    TextXAlignment = Enum.TextXAlignment.Left,
-                    TextTruncate = Enum.TextTruncate.AtEnd,
-                    Text = settings.title or 'Module',
-                }, frame)
-                local button = mk('TextButton', {
-                    Name = 'FloatingToggle',
-                    AutoButtonColor = false,
-                    Position = UDim2.fromOffset(10, 32),
-                    Size = UDim2.new(1, -20, 0, 40),
-                    BorderSizePixel = 0,
-                    Font = Enum.Font.GothamBold,
-                    TextSize = 14,
-                    Text = '',
-                }, frame)
-                mk('UICorner', { CornerRadius = UDim.new(0, 8) }, button)
-
-                local connections = {}
-                table.insert(connections, button.MouseButton1Click:Connect(function()
-                    ModuleManager:change_state(not ModuleManager._state)
-                end))
-
-                -- Drag by the card; the position is saved in the config file
-                local dragStart, startPosition = nil, nil
-                local function isPress(input)
-                    return input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch
-                end
-                table.insert(connections, frame.InputBegan:Connect(function(input)
-                    if isPress(input) then
-                        dragStart = input.Position
-                        startPosition = frame.Position
-                    end
-                end))
-                table.insert(connections, UserInputService.InputChanged:Connect(function(input)
-                    if dragStart and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-                        local delta = input.Position - dragStart
-                        frame.Position = UDim2.new(
-                            startPosition.X.Scale, startPosition.X.Offset + delta.X,
-                            startPosition.Y.Scale, startPosition.Y.Offset + delta.Y
-                        )
-                    end
-                end))
-                table.insert(connections, UserInputService.InputEnded:Connect(function(input)
-                    if dragStart and isPress(input) then
-                        dragStart = nil
-                        positions[settings.flag] = {
-                            XS = frame.Position.X.Scale,
-                            XO = frame.Position.X.Offset,
-                            YS = frame.Position.Y.Scale,
-                            YO = frame.Position.Y.Offset,
-                        }
-                        Config:save(game.GameId, Library._config)
-                    end
-                end))
-
-                floating = { frame = frame, button = button, connections = connections }
+                local card = createFloatingCard({
+                    flag = settings.flag,
+                    title = settings.title or 'Module',
+                    onClick = function()
+                        ModuleManager:change_state(not ModuleManager._state)
+                    end,
+                })
+                floating = { frame = card.frame, button = card.button, connections = card.connections }
                 paintFloating()
             end
 
@@ -6057,6 +6166,7 @@ function Library:create_ui()
 
                     if self._state then
                         ModuleManager._multiplier += self._size
+                        ModuleManager:refresh_size()
 
                         CurrentDropSizeState = self._size;
 
@@ -6076,6 +6186,7 @@ function Library:create_ui()
                         }):Play()
                     else
                         ModuleManager._multiplier -= self._size
+                        ModuleManager:refresh_size()
 
                         CurrentDropSizeState = 0;
 
@@ -6441,7 +6552,6 @@ function Library:create_ui()
                 local Row = mk("Frame", {
                     Name = "ColorPickerRow",
                     Size = UDim2.new(0, 207, 0, 22),
-                    AutomaticSize = Enum.AutomaticSize.Y,
                     BackgroundTransparency = 1,
                     LayoutOrder = LayoutOrderModule,
                 }, Options)
@@ -6630,16 +6740,27 @@ function Library:create_ui()
                     end
                 end)
 
+                -- The row has fixed heights (header 22, picker 140 more: gap 8 + area 110 + gap 8 + hue bar 14), and the
+                -- module is told about them, so the frame always has room for the whole picker
+                local pickerExtra = 140
+                local isOpen = false
                 local function setOpen(open)
+                    if open == isOpen then
+                        return
+                    end
+                    isOpen = open
                     Body.Visible = open
                     Chevron.Text = open and "^" or "v"
+                    Row.Size = UDim2.new(0, 207, 0, open and 22 + pickerExtra or 22)
+                    ModuleManager._size += open and pickerExtra or -pickerExtra
+                    ModuleManager:refresh_size()
                 end
                 local function closeSelf()
                     setOpen(false)
                 end
 
                 Header.MouseButton1Click:Connect(function()
-                    local opening = not Body.Visible
+                    local opening = not isOpen
                     if opening and Library._close_picker and Library._close_picker ~= closeSelf then
                         Library._close_picker()
                     end
