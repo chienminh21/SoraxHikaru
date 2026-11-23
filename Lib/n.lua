@@ -1,3 +1,31 @@
+--[[
+    Sora x Hikaru
+    iOS Dynamic Island v5
+
+    Based on: iOS Dynamic Island Test v4
+
+    Features:
+    - Persistent Dynamic Island
+    - Original Liquid Glass layout
+    - Gradient shimmer
+    - Notification queue
+    - Progress timer
+    - Custom icons and accents
+    - Success / Error / Warning / Info
+    - Optional notification sound
+    - Click to expand / collapse
+    - Idle fade
+    - Action buttons with callbacks
+    - Live Activity with ID
+    - Update / dismiss notifications
+    - Safe animation cancellation
+    - Complete notification cleanup
+    - UI Haptic simulation
+    - Button press feedback
+
+    Fix: Manual collapse (click) now fades content first then resizes,
+         matching the auto-dismiss behavior to prevent visual glitch.
+]]
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
@@ -723,7 +751,6 @@ local function setExpanded(expanded, force)
     isExpanded = expanded
 
     transitionId += 1
-
     local thisTransition = transitionId
 
     cancelIslandTweens()
@@ -749,27 +776,66 @@ local function setExpanded(expanded, force)
     else
         stopShimmer()
 
-        local animation = playIslandTween(
-            Island,
-            CONFIG.CollapseTime,
-            {
-                Size = UDim2.fromOffset(
-                    CONFIG.CompactWidth,
-                    CONFIG.CompactHeight
-                ),
-            }
-        )
+        local fadeDuration = 0.14
+
+        local function fade(obj, props)
+            local tw = TweenService:Create(
+                obj,
+                TweenInfo.new(fadeDuration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+                props
+            )
+            table.insert(islandTweens, tw)
+            tw:Play()
+        end
+
+        fade(Icon, { ImageTransparency = 1 })
+        fade(IconBackground, { BackgroundTransparency = 1 })
+        fade(Title, { TextTransparency = 1 })
+        fade(Content, { TextTransparency = 1 })
+        fade(TimeLabel, { TextTransparency = 1 })
+        fade(CloseButton, {
+            BackgroundTransparency = 1,
+            TextTransparency = 1,
+        })
+        fade(ProgressBackground, { BackgroundTransparency = 1 })
+        fade(Progress, { BackgroundTransparency = 1 })
 
         task.spawn(function()
-            animation.Completed:Wait()
+            task.wait(fadeDuration + 0.02)
 
-            if isDestroyed
-                or thisTransition ~= transitionId
-                or isExpanded then
+            if isDestroyed or thisTransition ~= transitionId or isExpanded then
                 return
             end
 
             hideNotificationContent()
+
+            local collapseTween = playIslandTween(
+                Island,
+                CONFIG.CollapseTime,
+                {
+                    Size = UDim2.fromOffset(
+                        CONFIG.CompactWidth,
+                        CONFIG.CompactHeight
+                    ),
+                }
+            )
+
+            collapseTween.Completed:Wait()
+
+            if isDestroyed or thisTransition ~= transitionId or isExpanded then
+                return
+            end
+
+            Island.Size = UDim2.fromOffset(
+                CONFIG.CompactWidth,
+                CONFIG.CompactHeight
+            )
+
+            Island.Position = UDim2.new(0.5, 0, 0, CONFIG.Top)
+
+            Island.BackgroundTransparency = CONFIG.Transparency
+            IslandStroke.Transparency = 0.65
+            Highlight.BackgroundTransparency = 0.65
         end)
     end
 end
@@ -1281,7 +1347,12 @@ function Notify:Destroy()
 
     stopShimmer()
     cancelIslandTweens()
-    cancelHapticTweens()
+
+    for _, animation in ipairs(hapticTweens) do
+        animation:Cancel()
+    end
+
+    table.clear(hapticTweens)
 
     table.clear(queue)
 
@@ -1291,6 +1362,10 @@ function Notify:Destroy()
     HapticSound:Destroy()
 
     ScreenGui:Destroy()
+
+    if _G.SoraNotify == self then
+        _G.SoraNotify = nil
+    end
 end
 
 ClickArea.Activated:Connect(function()
@@ -1316,6 +1391,8 @@ CloseButton.Activated:Connect(function()
     currentNotification.dismissed = true
 end)
 
+_G.SoraNotify = Notify
+
 local function setCompact()
     isExpanded = false
     isFinalizing = false
@@ -1336,6 +1413,4 @@ local function setCompact()
 end
 
 setCompact()
-
-return Notify
 
