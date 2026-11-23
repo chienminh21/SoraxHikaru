@@ -1,31 +1,4 @@
---[[
-    Sora x Hikaru
-    iOS Dynamic Island v5
 
-    Based on: iOS Dynamic Island Test v4
-
-    Features:
-    - Persistent Dynamic Island
-    - Original Liquid Glass layout
-    - Gradient shimmer
-    - Notification queue
-    - Progress timer
-    - Custom icons and accents
-    - Success / Error / Warning / Info
-    - Optional notification sound
-    - Click to expand / collapse
-    - Idle fade
-    - Action buttons with callbacks
-    - Live Activity with ID
-    - Update / dismiss notifications
-    - Safe animation cancellation
-    - Complete notification cleanup
-    - UI Haptic simulation
-    - Button press feedback
-
-    Fix: Manual collapse (click) now fades content first then resizes,
-         matching the auto-dismiss behavior to prevent visual glitch.
-]]
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
