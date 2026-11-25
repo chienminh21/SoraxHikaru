@@ -22,7 +22,9 @@ GG.SearchKey = GG.SearchKey or Enum.KeyCode.F       -- Ctrl + this key opens the
 GG.Themes = GG.Themes or nil                       -- custom themes: { Ocean = { Base = "Dark", Accent = Color3... } }
 GG.Version = GG.Version or "v2.0"                   -- shown in the sidebar info card
 GG.NotificationSoundId = GG.NotificationSoundId or nil  -- "rbxassetid://..." played by the notification "Sound" option of a module
-GG.NotifyMode = GG.NotifyMode or nil                -- "new" (default) or "old"; nil = use the saved choice
+GG.NotifyMode = GG.NotifyMode or nil                -- "new" (default), "old" or "dynamic"; nil = use the saved choice
+GG.DynamicIslandUrls = GG.DynamicIslandUrls or nil   -- { Dark = "...Lib/d.lua", Light = "...Lib/n.lua" }: where the Dynamic Island modules load from; nil = the SoraxHikaru repository
+GG.DynamicIslandModules = GG.DynamicIslandModules or nil  -- or the modules themselves: { Dark = table | function, Light = table | function }
 GG.ImageBackground = GG.ImageBackground or ""       -- image behind the window: "rbxassetid://..." / image URL / "" (none)
 GG.ImageBackgroundStyle = GG.ImageBackgroundStyle or "Crop"  -- Stretch | Fit | Crop | Tile | FadeLeft | FadeRight | FadeTop | FadeBottom
 GG.ImageBackgroundTransparency = GG.ImageBackgroundTransparency or 0.7
@@ -1145,7 +1147,7 @@ end
 
 -- Floating cards ---------------------------------------------------------
 -- A small draggable card with a title and one big button (the idea of b/button.lua). Its position is saved in the
--- config file. Used by the "Show Button" setting of a module and by Library.CreateMiniToggle.
+-- config file. Used by the "Show Button" setting of a module.
 -- It lives in its own ScreenGui, so it stays visible while the window is collapsed.
 local function getFloatingGui()
     if Library._floating_gui and Library._floating_gui.Parent then
@@ -1258,95 +1260,6 @@ local function createFloatingCard(options)
     end))
 
     return { frame = frame, button = button, connections = connections }
-end
-
--- Mini toggle: a small floating toggle you can drag anywhere. Its position and its state are saved.
---   Library.CreateMiniToggle({ title = "Manual Spam", flag = "mini_spam", default = false,
---                              keybind = Enum.KeyCode.X, callback = function(state) end })
--- Returns { Set(state), Get(), Toggle(), SetTitle(text), Show(), Hide(), Destroy() }.
--- The callback runs once at creation (with the saved state) and then on every change.
-function Library.CreateMiniToggle(settings)
-    settings = settings or {}
-    local flag = settings.flag or settings.title or 'mini_toggle'
-    local saved = Library._config._flags[flag]
-    local state = type(saved) == 'boolean' and saved or settings.default == true
-    local manager = {}
-    local card
-
-    local function paint()
-        card.button.Text = state and 'ON' or 'OFF'
-        card.button.BackgroundColor3 = state and CurrentTheme.Accent or CurrentTheme.Card
-        card.button.TextColor3 = state and contrastText(CurrentTheme.Accent) or CurrentTheme.TextSecondary
-    end
-
-    card = createFloatingCard({
-        flag = flag,
-        title = settings.title or 'Toggle',
-        onClick = function()
-            manager:Set(not state)
-        end,
-    })
-
-    if typeof(settings.keybind) == 'EnumItem' then
-        table.insert(card.connections, UserInputService.InputBegan:Connect(function(input, processed)
-            if not processed and input.KeyCode == settings.keybind then
-                manager:Set(not state)
-            end
-        end))
-    end
-
-    table.insert(Library._theme_hooks, paint)
-    paint()
-
-    function manager:Set(value)
-        value = value == true
-        if value == state then
-            return
-        end
-        state = value
-        Library._config._flags[flag] = state
-        Config:save(game.GameId, Library._config)
-        paint()
-        if settings.callback then
-            settings.callback(state)
-        end
-    end
-
-    function manager:Get()
-        return state
-    end
-
-    function manager:Toggle()
-        manager:Set(not state)
-    end
-
-    function manager:SetTitle(text)
-        card.frame.FloatingTitle.Text = tostring(text)
-    end
-
-    function manager:Show()
-        card.frame.Visible = true
-    end
-
-    function manager:Hide()
-        card.frame.Visible = false
-    end
-
-    function manager:Destroy()
-        for _, connection in ipairs(card.connections) do
-            connection:Disconnect()
-        end
-        local position = table.find(Library._theme_hooks, paint)
-        if position then
-            table.remove(Library._theme_hooks, position)
-        end
-        card.frame:Destroy()
-    end
-
-    if settings.callback then
-        settings.callback(state)
-    end
-    return manager
 end
 
 --  Notification 
@@ -1710,17 +1623,153 @@ local function sendNew(settings)
     return entry
 end
 
--- Which style is active: GG.NotifyMode (if set), otherwise the saved choice, otherwise "new"
-local function getNotifyMode()
-    local mode = GG.NotifyMode
-    if mode ~= "old" and mode ~= "new" then
-        mode = Library._config._library and Library._config._library.notify_mode
-    end
-    return mode == "old" and "old" or "new"
+-- ===== DYNAMIC style (iOS Dynamic Island) =====
+-- Two looks: Lib/d.lua (solid black) for dark themes and Lib/n.lua (glass) for light themes. Only one is loaded at a
+-- time, it is loaded once and reused for every notification, and a change between a dark and a light theme swaps it.
+local DYNAMIC_TYPES = { info = "Info", success = "Success", warning = "Warning", error = "Error" }
+local DYNAMIC_URLS = {
+    Dark = "https://raw.githubusercontent.com/chienminh21/SoraxHikaru/main/Lib/d.lua",
+    Light = "https://raw.githubusercontent.com/chienminh21/SoraxHikaru/main/Lib/n.lua",
+}
+local dynamicIsland = nil
+local dynamicVariant = nil
+local dynamicFailedVariant = nil
+
+-- "Light" when the active theme has a light background (the built-in Light theme and custom themes based on it)
+local function getDynamicVariant()
+    local background = CurrentTheme.Background
+    local brightness = background.R * 0.299 + background.G * 0.587 + background.B * 0.114
+    return brightness > 0.5 and "Light" or "Dark"
 end
 
+local function loadDynamicIsland(variant)
+    local modules = GG.DynamicIslandModules
+    local provided = type(modules) == "table" and modules[variant] or nil
+    if type(provided) == "function" then
+        return provided()
+    elseif type(provided) == "table" then
+        return provided
+    end
+
+    local urls = GG.DynamicIslandUrls
+    local url = type(urls) == "table" and urls[variant] or nil
+    if type(url) ~= "string" or url == "" then
+        url = DYNAMIC_URLS[variant]
+    end
+
+    local source = game:HttpGet(url)
+    -- Lib/n.lua does not end with "return Notify" (it only registers itself in _G), so the module is returned from
+    -- here instead: no global is needed to reach it
+    if not string.find(source, "return%s+Notify%s*$") then
+        source = source .. "\nreturn Notify"
+    end
+    return loadstring(source, "=DynamicIsland")()
+end
+
+local function getDynamicIsland()
+    local variant = getDynamicVariant()
+
+    if dynamicIsland and dynamicVariant ~= variant then
+        Notify.ResetDynamic()
+    end
+    if dynamicIsland then
+        return dynamicIsland
+    end
+    if dynamicFailedVariant == variant then
+        return nil
+    end
+
+    local loaded, island = pcall(loadDynamicIsland, variant)
+    if loaded and type(island) == "table" and type(island.Send) == "function" then
+        dynamicIsland = island
+        dynamicVariant = variant
+        dynamicFailedVariant = nil
+        return dynamicIsland
+    end
+
+    -- Tried once for this look: later notifications go straight to the "new" style instead of loading again
+    dynamicFailedVariant = variant
+    warn("[Sora x Hikaru] Dynamic Island (" .. variant .. ") could not be loaded, notifications use the new style: " .. tostring(loaded and "the module has no Send method" or island))
+    return nil
+end
+
+local function sendDynamic(settings)
+    local island = getDynamicIsland()
+    if not island then
+        return sendNew(settings)
+    end
+
+    -- The island shows image icons only (an asset id or a downloaded image); Lucide names use the icon of the type
+    local icon = settings.icon and resolveImageContent(settings.icon) or nil
+    local kind = DYNAMIC_TYPES[settings.type] or "Info"
+    local sent, result = pcall(island.Send, island, {
+        Title = settings.title,
+        Content = settings.text,
+        Type = kind,
+        Duration = settings.duration,
+        Icon = icon,
+    })
+    if sent then
+        return result
+    end
+
+    -- Send did not accept these options: try the shortcut of this type (content only), then the "new" style
+    local content = (settings.title and settings.text) and (settings.title .. ": " .. settings.text) or settings.text or settings.title or ""
+    if type(island[kind]) == "function" then
+        local shortcutSent, shortcutResult = pcall(island[kind], island, content, settings.duration)
+        if shortcutSent then
+            return shortcutResult
+        end
+    end
+    warn("[Sora x Hikaru] Dynamic Island rejected the notification: " .. tostring(result))
+    return sendNew(settings)
+end
+
+local NOTIFY_MODES = { old = true, new = true, dynamic = true }
+
+-- "old", "new" or "dynamic" (any capitalization); nil for anything else
+local function normalizeNotifyMode(value)
+    if type(value) ~= "string" then
+        return nil
+    end
+    local mode = string.lower(value)
+    return NOTIFY_MODES[mode] and mode or nil
+end
+
+-- Which style is active: GG.NotifyMode (if valid), otherwise the saved choice (if valid), otherwise "new"
+local function getNotifyMode()
+    local mode = normalizeNotifyMode(GG.NotifyMode)
+    if not mode then
+        mode = normalizeNotifyMode(Library._config._library and Library._config._library.notify_mode)
+    end
+    return mode or "new"
+end
+
+-- Accepts { title, text, duration, type, icon } as well as { Title, Content, Duration, Type, Icon }
+local function readNotifyOptions(settings)
+    settings = settings or {}
+    local kind = string.lower(tostring(settings.type or settings.Type or "info"))
+    if kind == "warn" then
+        kind = "warning"
+    end
+    return {
+        title = settings.title or settings.Title,
+        text = settings.text or settings.Content,
+        duration = settings.duration or settings.Duration,
+        type = kind,
+        icon = settings.icon or settings.Icon,
+    }
+end
+
+-- The one entry point: every notification of every style goes through here
 function Notify.Send(settings)
-    if getNotifyMode() == "old" then
+    settings = readNotifyOptions(settings)
+
+    local mode = getNotifyMode()
+    if mode == "dynamic" then
+        return sendDynamic(settings)
+    end
+    if mode == "old" then
         return sendOld(settings)
     end
     return sendNew(settings)
@@ -1739,11 +1788,26 @@ function Notify.Error(title, text, duration)
     return Notify.Send({ title = title, text = text, duration = duration, type = "error" })
 end
 
+Notify.Warning = Notify.Warn
 Notify.SendNotification = Notify.Send
 
 function Notify.Clear()
     for _, e in ipairs(table.clone(active)) do
         e.Dismiss()
+    end
+    if dynamicIsland and type(dynamicIsland.ClearQueue) == "function" then
+        dynamicIsland:ClearQueue()
+    end
+end
+
+-- Removes the Dynamic Island and forgets it; the next notification in "dynamic" mode loads it again
+function Notify.ResetDynamic()
+    local island = dynamicIsland
+    dynamicIsland = nil
+    dynamicVariant = nil
+    dynamicFailedVariant = nil
+    if island and type(island.Destroy) == "function" then
+        island:Destroy()
     end
 end
 
@@ -1751,6 +1815,7 @@ function Notify.Destroy()
     for _, c in ipairs(notifyConnections) do c:Disconnect() end
     table.clear(notifyConnections)
     table.clear(active)
+    Notify.ResetDynamic()
     notifyGui:Destroy()
     getgenv().SxH_Notify = nil
 end
@@ -1764,14 +1829,39 @@ end
 
 Library.Notify = Notify
 
--- Switch between the "old" and "new" notification style (saved in the config)
+-- Library:Notify({ Title, Content, Type, Duration, Icon }) and Library.Notify({ ... }) go through Notify.Send,
+-- while Library.Notify.Success(...) and the other helpers work as before
+setmetatable(Notify, {
+    __call = function(_, first, second)
+        if first == Library then
+            return Notify.Send(second)
+        end
+        return Notify.Send(first)
+    end,
+})
+
+-- Switch the notification style: "old", "new" or "dynamic" (saved in the config).
+-- Anything else selects "new", the default.
 function Library.SetNotifyMode(mode)
-    mode = (mode == "old") and "old" or "new"
+    local previous = getNotifyMode()
+    mode = normalizeNotifyMode(mode) or "new"
     GG.NotifyMode = mode
     Library._config._library.notify_mode = mode
     Config:save(game.GameId, Library._config)
+
+    -- leaving "dynamic": take the island off the screen
+    if previous == "dynamic" and mode ~= "dynamic" then
+        Notify.ResetDynamic()
+    end
+
     Notify.Info("Notifications", "Style: " .. mode, 2)
     return mode
+end
+
+-- The Dynamic Island instance (loaded on first use), for its own features:
+-- LiveActivity, Update, Dismiss, SetSound, SetHaptic, SetIdleDelay, SetAccent. nil if it could not be loaded.
+function Library.GetDynamicIsland()
+    return getDynamicIsland()
 end
 
 function Library.GetNotifyMode()
@@ -2233,6 +2323,7 @@ function Library:create_ui()
             Library._floating_gui:Destroy()
             Library._floating_gui = nil
         end
+        Notify.ResetDynamic()
     end)
 
     ---------------------------------------------------------------
@@ -2838,6 +2929,7 @@ function Library:create_ui()
     -- Shown on the right of a result, taken from the control's instance name
     local CONTROL_KINDS = {
         Checkbox = "Toggle",
+        MiniToggle = "Toggle",
         Slider = "Slider",
         RangeSlider = "Range",
         Dropdown = "Dropdown",
@@ -3312,11 +3404,6 @@ function Library:create_ui()
 
     function self:Search(query)
         openSearch(query)
-    end
-
-    -- Window:create_mini_toggle({ ... }) is Library.CreateMiniToggle
-    function self:create_mini_toggle(settings)
-        return Library.CreateMiniToggle(settings)
     end
 
     function self:Update1Run(a)
@@ -6465,6 +6552,203 @@ function Library:create_ui()
                 end;
             
                 return FeatureContainer
+            end
+
+            -- ===================== Mini toggle =====================
+            -- A small toggle row among the controls of a module: like a checkbox, drawn as a little switch.
+            -- settings: { title, flag, default = false, callback = function(state) end }
+            -- Middle click the row to give it a key (Backspace clears it). The state is saved by flag.
+            -- Returns { Set(state), Get(), Toggle(), SetTitle(text) }.
+            function ModuleManager:create_mini_toggle(settings: any)
+                LayoutOrderModule = LayoutOrderModule + 1
+                local MiniManager = { _state = false }
+                local flag = settings.flag
+
+                if self._size == 0 then self._size = 11 end
+                self._size += 20
+
+                if ModuleManager._state then
+                    Module.Size = UDim2.fromOffset(241, 93 + self._size)
+                end
+                Options.Size = UDim2.fromOffset(241, self._size)
+
+                local Row = mk('TextButton', {
+                    Name = 'MiniToggle',
+                    Text = '',
+                    AutoButtonColor = false,
+                    BackgroundTransparency = 1,
+                    Size = UDim2.new(0, 207, 0, 15),
+                    BorderSizePixel = 0,
+                    LayoutOrder = LayoutOrderModule,
+                }, Options)
+
+                local Title = mk('TextLabel', {
+                    Name = 'TitleLabel',
+                    FontFace = Font.new('rbxasset://fonts/families/GothamSSm.json', Enum.FontWeight.SemiBold, Enum.FontStyle.Normal),
+                    TextSize = SelectedLanguage == 'th' and 13 or 11,
+                    TextColor3 = CurrentTheme.TextPrimary,
+                    TextTransparency = 0.2,
+                    Text = settings.title or 'Toggle',
+                    Size = UDim2.new(1, -70, 0, 13),
+                    AnchorPoint = Vector2.new(0, 0.5),
+                    Position = UDim2.new(0, 0, 0.5, 0),
+                    BackgroundTransparency = 1,
+                    TextXAlignment = Enum.TextXAlignment.Left,
+                    TextTruncate = Enum.TextTruncate.AtEnd,
+                }, Row)
+
+                -- The switch (same look as the toggle of the module)
+                local Track = mk('Frame', {
+                    Name = 'MiniTrack',
+                    AnchorPoint = Vector2.new(1, 0.5),
+                    Position = UDim2.new(1, 0, 0.5, 0),
+                    Size = UDim2.fromOffset(25, 12),
+                    BackgroundColor3 = Color3.new(0, 0, 0),
+                    BackgroundTransparency = 0.7,
+                    BorderSizePixel = 0,
+                }, Row)
+                mk('UICorner', { CornerRadius = UDim.new(1, 0) }, Track)
+                local Knob = mk('Frame', {
+                    Name = 'MiniKnob',
+                    AnchorPoint = Vector2.new(0, 0.5),
+                    Position = UDim2.fromScale(0, 0.5),
+                    Size = UDim2.fromOffset(12, 12),
+                    BackgroundColor3 = CurrentTheme.ToggleOff,
+                    BackgroundTransparency = 0.2,
+                    BorderSizePixel = 0,
+                }, Track)
+                mk('UICorner', { CornerRadius = UDim.new(1, 0) }, Knob)
+
+                -- The key of this toggle, shown left of the switch when it has one
+                local KeyChip = mk('TextLabel', {
+                    Name = 'MiniKey',
+                    AnchorPoint = Vector2.new(1, 0.5),
+                    Position = UDim2.new(1, -33, 0.5, 0),
+                    Size = UDim2.fromOffset(31, 15),
+                    BackgroundColor3 = CurrentTheme.Accent,
+                    BackgroundTransparency = 0.7,
+                    BorderSizePixel = 0,
+                    FontFace = Font.new('rbxasset://fonts/families/GothamSSm.json', Enum.FontWeight.SemiBold, Enum.FontStyle.Normal),
+                    TextSize = 10,
+                    TextColor3 = Color3.fromRGB(209, 222, 255),
+                    Text = '',
+                    Visible = false,
+                }, Row)
+                mk('UICorner', { CornerRadius = UDim.new(0, 3) }, KeyChip)
+
+                local function paint(animate)
+                    local info = TweenInfo.new(animate and 0.5 or 0, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+                    local on = MiniManager._state
+                    TweenService:Create(Track, info, { BackgroundColor3 = on and CurrentTheme.Accent or Color3.new(0, 0, 0) }):Play()
+                    TweenService:Create(Knob, info, {
+                        BackgroundColor3 = on and CurrentTheme.Accent or CurrentTheme.ToggleOff,
+                        Position = on and UDim2.fromScale(0.53, 0.5) or UDim2.fromScale(0, 0.5),
+                    }):Play()
+                end
+
+                local function showKey()
+                    local bound = Library._config._keybinds[flag]
+                    if bound then
+                        local text = (string.gsub(tostring(bound), 'Enum.KeyCode.', ''))
+                        KeyChip.Text = text
+                        KeyChip.Size = UDim2.fromOffset(math.max(31, TextService:GetTextSize(text, 10, Enum.Font.GothamMedium, Vector2.new(200, 20)).X + 10), 15)
+                        KeyChip.Visible = true
+                    else
+                        KeyChip.Visible = false
+                    end
+                end
+
+                function MiniManager:Set(state)
+                    state = state == true
+                    if state == self._state then
+                        return
+                    end
+                    self._state = state
+                    paint(true)
+                    Library._config._flags[flag] = state
+                    Config:save(game.GameId, Library._config)
+                    if settings.callback then
+                        settings.callback(state)
+                    end
+                end
+
+                function MiniManager:Get()
+                    return self._state
+                end
+
+                function MiniManager:Toggle()
+                    self:Set(not self._state)
+                end
+
+                function MiniManager:SetTitle(text)
+                    Title.Text = tostring(text)
+                end
+
+                Row.MouseButton1Click:Connect(function()
+                    MiniManager:Set(not MiniManager._state)
+                end)
+
+                -- Middle click: choose a key. Backspace removes it.
+                Row.InputBegan:Connect(function(input)
+                    if input.UserInputType ~= Enum.UserInputType.MouseButton3 or Library._choosing_keybind then
+                        return
+                    end
+
+                    Library._choosing_keybind = true
+                    KeyChip.Visible = true
+                    KeyChip.Text = '...'
+
+                    local connection
+                    connection = UserInputService.InputBegan:Connect(function(keyInput, processed)
+                        if processed or keyInput.UserInputType ~= Enum.UserInputType.Keyboard or keyInput.KeyCode == Enum.KeyCode.Unknown then
+                            return
+                        end
+                        connection:Disconnect()
+                        Library._choosing_keybind = false
+
+                        if keyInput.KeyCode == Enum.KeyCode.Backspace then
+                            Library._config._keybinds[flag] = nil
+                        else
+                            Library._config._keybinds[flag] = tostring(keyInput.KeyCode)
+                        end
+                        Config:save(game.GameId, Library._config)
+                        showKey()
+                    end)
+                    table.insert(ModuleManager._connections, connection)
+                end)
+
+                trackedConnect(UserInputService.InputBegan, function(input, processed)
+                    if processed then
+                        return
+                    end
+                    local bound = Library._config._keybinds[flag]
+                    if bound and tostring(input.KeyCode) == bound then
+                        MiniManager:Set(not MiniManager._state)
+                    end
+                end)
+
+                -- Follow theme changes
+                local function repaint()
+                    Title.TextColor3 = CurrentTheme.TextPrimary
+                    KeyChip.BackgroundColor3 = CurrentTheme.Accent
+                    paint(false)
+                end
+                table.insert(Library._theme_hooks, repaint)
+                table.insert(extraHooks, repaint)
+
+                -- Start like a checkbox: a saved value wins, otherwise `default`
+                showKey()
+                if Library:flag_type(flag, 'boolean') then
+                    MiniManager._state = Library._config._flags[flag]
+                    paint(false)
+                    if settings.callback then
+                        settings.callback(MiniManager._state)
+                    end
+                elseif settings.default == true then
+                    MiniManager:Set(true)
+                end
+
+                return MiniManager
             end
 
             -- ===================== Button =====================
