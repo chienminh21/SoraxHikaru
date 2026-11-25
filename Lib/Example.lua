@@ -1,11 +1,12 @@
+-- Sora x Hikaru | Complete V1 Example
 
-
+-- Configuration
 
 getgenv().GG = {
     UIName = "Sora x Hikaru",
     Version = "v1.0",
 
-    Theme = "DarkBlackPremium",
+    Theme = "PureBlack",
 
     ToggleKey = Enum.KeyCode.Insert,
     NotifyMode = "new",
@@ -39,7 +40,7 @@ getgenv().GG = {
     ImageBackgroundTransparency = 0.7,
 
     Themes = {
-        DarkBlackPremium = {
+        PureBlack = {
             Base = "Dark",
 
             Background = Color3.fromRGB(3, 3, 3),
@@ -61,6 +62,8 @@ getgenv().GG = {
     },
 }
 
+-- Library
+
 local BASE = "https://raw.githubusercontent.com/chienminh21/SoraxHikaru/main/"
 
 local Library = loadstring(game:HttpGet(BASE .. "Lib/UI.lua"))()
@@ -69,44 +72,30 @@ local Window = Library.new()
 local flags = Library._config._flags
 local ready = false
 
-local Main = Window:create_tab("Main", "home")
-local Controls = Window:create_tab("Controls", "sliders-horizontal")
-local Settings = Window:create_tab("Settings", "settings")
+-- Main tab
 
-local Intro = Main:create_module({
-    title = "Module example",
-    description = "Middle-click header to bind a key",
-    flag = "module_example",
+local Main = Window:create_tab("Main", "home")
+
+local AutoParry = Main:create_module({
+    title = "Auto Parry",
+    description = "Example module with settings and notifications",
+    flag = "auto_parry",
     section = "left",
     setting = true,
     notification = true,
 
     callback = function(state)
-        print("Module:", state)
+        print("Auto Parry:", state)
     end,
 })
 
-Intro:create_paragraph({
-    title = "About modules",
-    text = "A module is a toggle block. Controls below only show meaning when the module is on. Use unique flags for every saved control.",
-})
+AutoParry:create_slider({
+    title = "Accuracy",
+    flag = "parry_accuracy",
 
-local SliderMod = Controls:create_module({
-    title = "Slider",
-    description = "One value between min and max",
-    flag = "mod_slider",
-    section = "left",
-
-    callback = function(state) end,
-})
-
-SliderMod:create_slider({
-    title = "Speed",
-    flag = "speed",
-
-    minimum_value = 1,
+    minimum_value = 0,
     maximum_value = 100,
-    value = 50,
+    value = 70,
 
     round_number = true,
 
@@ -114,57 +103,264 @@ SliderMod:create_slider({
     max_color = Color3.fromRGB(0, 0, 0),
 
     callback = function(value)
-        print("Speed:", value)
+        print("Accuracy:", value)
     end,
 })
 
-SliderMod:create_paragraph({
-    title = "Slider color",
-    text = "Customize the slider fill using left_color and max_color.",
-})
-
-local RangeMod = Controls:create_module({
-    title = "Range slider",
-    description = "Two handles: minimum and maximum",
-    flag = "mod_range",
-    section = "right",
-
-    callback = function(state) end,
-})
-
-RangeMod:create_range_slider({
-    title = "range slider",
+AutoParry:create_range_slider({
+    title = "Parry Distance",
     flag = "parry_distance",
+
     minimum_value = 0,
     maximum_value = 50,
     min_value = 5,
     max_value = 30,
+
     round_number = true,
+
     left_color = Color3.fromRGB(255, 255, 255),
     max_color = Color3.fromRGB(0, 0, 0),
+
     callback = function(minValue, maxValue)
         print("Distance:", minValue, maxValue)
     end,
 })
 
+AutoParry:create_dropdown({
+    title = "Parry Mode",
+    flag = "parry_mode",
 
-RangeMod:create_paragraph({
-    title = "Range slider color",
-    text = "Customize the selected range using left_color and max_color.",
+    options = {
+        "Remote",
+        "Keypress",
+        "Hybrid",
+    },
+
+    maximum_options = 3,
+
+    callback = function(option)
+        print("Parry Mode:", option)
+    end,
 })
 
-local DropSingle = Controls:create_module({
-    title = "Dropdown (single)",
-    description = "Select one option only",
-    flag = "mod_drop_single",
+AutoParry:create_checkbox({
+    title = "Randomize Accuracy",
+    flag = "parry_random",
+
+    callback = function(state)
+        print("Randomize:", state)
+    end,
+})
+
+AutoParry:create_mini_toggle({
+    title = "Only When Target Is Near",
+    flag = "parry_near",
+    default = false,
+
+    callback = function(state)
+        print("Near Only:", state)
+    end,
+})
+
+Main:create_module({
+    title = "Kill Aura",
+    description = "Module with settings",
+    flag = "kill_aura",
+    section = "right",
+    setting = true,
+
+    callback = function(state)
+        print("Kill Aura:", state)
+    end,
+})
+
+Main:create_module({
+    title = "Auto Farm",
+    description = "Module with notifications",
+    flag = "auto_farm",
+    section = "right",
+    notification = true,
+
+    callback = function(state)
+        print("Auto Farm:", state)
+    end,
+})
+
+Main:create_module({
+    title = "Fullbright",
+    description = "Standard module example",
+    flag = "fullbright",
+    icon = "sun",
+    section = "left",
+
+    callback = function(state)
+        local Lighting = game:GetService("Lighting")
+        Lighting.Brightness = state and 3 or 1
+    end,
+})
+
+Main:create_module({
+    title = "Example Module",
+    description = "Basic toggle module",
+    flag = "example_module",
+    section = "right",
+
+    callback = function(state)
+        print("Example Module:", state)
+    end,
+})
+
+-- Exp tab
+
+local Exp = Window:create_tab("Exp", "sliders-horizontal")
+
+-- Slider examples
+
+local Sliders = Exp:create_module({
+    title = "Sliders",
+    description = "Standard and custom sliders",
+    flag = "exp_sliders",
     section = "left",
 
     callback = function(state) end,
 })
 
-DropSingle:create_dropdown({
-    title = "Mode",
-    flag = "mode_single",
+Sliders:create_slider({
+    title = "Standard Slider",
+    flag = "exp_slider",
+
+    minimum_value = 0,
+    maximum_value = 200,
+    value = 50,
+
+    round_number = true,
+
+    callback = function(value)
+        print("Slider:", value)
+    end,
+})
+
+Sliders:create_slider({
+    title = "Custom Color Slider",
+    flag = "exp_slider_color",
+
+    minimum_value = 0,
+    maximum_value = 100,
+    value = 30,
+
+    round_number = true,
+
+    left_color = Color3.fromRGB(255, 220, 80),
+    max_color = Color3.fromRGB(255, 60, 60),
+
+    callback = function(value)
+        print("Custom Slider:", value)
+    end,
+})
+
+Sliders:create_paragraph({
+    title = "Slider Information",
+    text = "Slider colors can be customized using left_color and max_color.",
+})
+
+-- Range slider examples
+
+local RangeSliders = Exp:create_module({
+    title = "Range Sliders",
+    description = "Two-handle slider controls",
+    flag = "exp_range_sliders",
+    section = "right",
+
+    callback = function(state) end,
+})
+
+RangeSliders:create_range_slider({
+    title = "Standard Range",
+    flag = "exp_range",
+
+    minimum_value = 0,
+    maximum_value = 100,
+    min_value = 20,
+    max_value = 80,
+
+    round_number = true,
+
+    callback = function(minValue, maxValue)
+        print("Range:", minValue, maxValue)
+    end,
+})
+
+RangeSliders:create_range_slider({
+    title = "Custom Range",
+    flag = "exp_range_custom",
+
+    minimum_value = 0,
+    maximum_value = 50,
+    min_value = 5,
+    max_value = 30,
+
+    round_number = true,
+
+    left_color = Color3.fromRGB(255, 255, 255),
+    max_color = Color3.fromRGB(0, 0, 0),
+
+    callback = function(minValue, maxValue)
+        print("Custom Range:", minValue, maxValue)
+    end,
+})
+
+-- Toggle and checkbox examples
+
+local Toggles = Exp:create_module({
+    title = "Toggles",
+    description = "Checkbox and mini toggle examples",
+    flag = "exp_toggles",
+    section = "left",
+
+    callback = function(state) end,
+})
+
+Toggles:create_checkbox({
+    title = "Checkbox",
+    flag = "exp_checkbox",
+
+    callback = function(state)
+        print("Checkbox:", state)
+    end,
+})
+
+local miniToggle = Toggles:create_mini_toggle({
+    title = "Mini Toggle",
+    flag = "exp_mini_toggle",
+    default = false,
+
+    callback = function(state)
+        print("Mini Toggle:", state)
+    end,
+})
+
+Toggles:create_button({
+    title = "Toggle Mini Toggle",
+
+    callback = function()
+        miniToggle:Toggle()
+    end,
+})
+
+-- Dropdown examples
+
+local Dropdowns = Exp:create_module({
+    title = "Dropdowns",
+    description = "Single and multiple selection",
+    flag = "exp_dropdowns",
+    section = "right",
+
+    callback = function(state) end,
+})
+
+Dropdowns:create_dropdown({
+    title = "Single Selection",
+    flag = "exp_dropdown_single",
 
     options = {
         "TP",
@@ -175,27 +371,13 @@ DropSingle:create_dropdown({
     maximum_options = 6,
 
     callback = function(option)
-        print("Single selected:", option)
+        print("Selected:", option)
     end,
 })
 
-DropSingle:create_paragraph({
-    title = "How single works",
-    text = "Select one item. The callback receives one string, and flags[flag] stores that string.",
-})
-
-local DropMulti = Controls:create_module({
-    title = "Dropdown (multi)",
-    description = "Select multiple options",
-    flag = "mod_drop_multi",
-    section = "right",
-
-    callback = function(state) end,
-})
-
-DropMulti:create_dropdown({
-    title = "Items",
-    flag = "mode_multi",
+Dropdowns:create_dropdown({
+    title = "Multiple Selection",
+    flag = "exp_dropdown_multi",
 
     options = {
         "Coin",
@@ -208,216 +390,189 @@ DropMulti:create_dropdown({
     multi_dropdown = true,
 
     callback = function(option)
-        local selected = flags["mode_multi"] or {}
+        local selected = flags["exp_dropdown_multi"] or {}
 
-        print("Last click:", option)
-        print("All selected:", table.concat(selected, ", "))
+        print("Last Selected:", option)
+        print("All Selected:", table.concat(selected, ", "))
     end,
 })
 
-DropMulti:create_paragraph({
-    title = "How multi works",
-    text = "Select multiple items. The callback receives the last clicked option. Read flags[flag] for the full selected list.",
-})
+-- Player list
 
-local PlayerMod = Controls:create_module({
-    title = "Player list",
-    description = "Dropdown of current players",
-    flag = "mod_players",
+local PlayersModule = Exp:create_module({
+    title = "Player List",
+    description = "Select a player from the server",
+    flag = "exp_players",
     section = "left",
 
     callback = function(state) end,
 })
 
-PlayerMod:create_playerlist({
-    title = "Target",
-    flag = "target_player",
+PlayersModule:create_playerlist({
+    title = "Target Player",
+    flag = "exp_target_player",
 
     callback = function(name)
-        print("Target:", name)
+        print("Target Player:", name)
     end,
 })
 
-local CheckMod = Controls:create_module({
-    title = "Checkbox",
-    description = "On/off inside a module",
-    flag = "mod_check",
+-- Text input examples
+
+local Inputs = Exp:create_module({
+    title = "Text Inputs",
+    description = "Textbox and text examples",
+    flag = "exp_inputs",
     section = "right",
 
     callback = function(state) end,
 })
 
-CheckMod:create_checkbox({
-    title = "Auto collect",
-    flag = "auto_collect",
-
-    callback = function(state)
-        print("Auto collect:", state)
-    end,
-})
-
-local TextMod = Controls:create_module({
+Inputs:create_textbox({
     title = "Textbox",
-    description = "Free text input",
-    flag = "mod_text",
-    section = "left",
+    placeholder = "Enter text...",
+    flag = "exp_textbox",
 
-    callback = function(state) end,
-})
-
-TextMod:create_textbox({
-    title = "Profile",
-    placeholder = "Type here...",
-    flag = "profile_name",
-
-    callback = function(text)
-        print("Profile:", text)
+    callback = function(value)
+        print("Textbox:", value)
     end,
 })
 
-local ButtonMod = Controls:create_module({
-    title = "Button",
-    description = "One-shot action",
-    flag = "mod_button",
-    section = "right",
-
-    callback = function(state) end,
+local infoText = Inputs:create_text({
+    text = "Status: Ready",
+    CustomYSize = 30,
 })
 
-ButtonMod:create_button({
-    title = "Run once",
+Inputs:create_button({
+    title = "Update Text",
 
     callback = function()
-        Library.Notify.Info("Button", "Clicked", 2)
+        infoText:Set({
+            text = "Status: Updated",
+        })
     end,
 })
 
-local FeatureMod = Controls:create_module({
-    title = "Feature",
-    description = "Checkbox row with a keybind",
-    flag = "mod_feature",
+Inputs:create_paragraph({
+    title = "Paragraph",
+    text = "This is an example paragraph. It can be used to display information or instructions.",
+})
+
+Inputs:create_divider({
+    showtopic = true,
+    title = "Text Components",
+})
+
+-- Button and feature examples
+
+local Buttons = Exp:create_module({
+    title = "Buttons and Features",
+    description = "Buttons, keybinds and tooltips",
+    flag = "exp_buttons",
     section = "left",
 
     callback = function(state) end,
 })
 
-FeatureMod:create_feature({
-    title = "Quick action",
-    flag = "quick_action",
+local exampleButton = Buttons:create_button({
+    title = "Example Button",
+
+    callback = function()
+        print("Button Clicked")
+        Library.Notify.Info("Button", "You clicked the example button.", 2)
+    end,
+})
+
+Buttons:create_tooltip(
+    exampleButton,
+    "Click to execute this example action."
+)
+
+Buttons:create_feature({
+    title = "Feature Example",
+    flag = "exp_feature",
     default = "G",
 
     callback = function(checked)
-        print("Checked:", checked)
+        print("Feature Checked:", checked)
     end,
 
     button_callback = function()
-        print("Key pressed")
+        print("Feature Key Pressed")
     end,
 })
 
-local ColorMod = Controls:create_module({
-    title = "Color picker",
-    description = "Click row to expand picker",
-    flag = "mod_color",
+Buttons:create_section({
+    title = "Additional Controls",
+})
+
+Buttons:create_button({
+    title = "Second Button",
+
+    callback = function()
+        Library.Notify.Success("Success", "Second button clicked.", 2)
+    end,
+})
+
+-- Color picker examples
+
+local ColorPickers = Exp:create_module({
+    title = "Color Pickers",
+    description = "Custom color selection",
+    flag = "exp_color_pickers",
     section = "right",
 
     callback = function(state) end,
 })
 
-local colorRef = ColorMod:create_colorpicker({
-    title = "ESP color",
-    flag = "esp_color",
+local expColor = ColorPickers:create_colorpicker({
+    title = "Default Color",
+    flag = "exp_color_default",
 
     default = Color3.fromRGB(205, 205, 215),
     notify = false,
 
     callback = function(color)
-        print("ESP Color:", color)
+        print("Selected Color:", color)
     end,
 })
 
-local TextUiMod = Controls:create_module({
-    title = "Text helpers",
-    description = "Divider, paragraph, updatable label",
-    flag = "mod_text_ui",
+ColorPickers:create_colorpicker({
+    title = "Red Color",
+    flag = "exp_color_red",
+
+    default = Color3.fromRGB(255, 70, 70),
+    notify = false,
+
+    callback = function(color)
+        print("Red Picker:", color)
+    end,
+})
+
+ColorPickers:create_button({
+    title = "Reset First Color",
+
+    callback = function()
+        expColor:Set(Color3.fromRGB(205, 205, 215))
+    end,
+})
+
+-- Themes tab
+
+local Themes = Window:create_tab("Themes", "palette")
+
+local ThemeMod = Themes:create_module({
+    title = "Theme Selection",
+    description = "Change the UI theme",
+    flag = "theme_selection",
     section = "left",
-
-    callback = function(state) end,
-})
-
-TextUiMod:create_divider({
-    showtopic = true,
-    title = "Section label",
-})
-
-TextUiMod:create_paragraph({
-    title = "Paragraph",
-    text = "Long help text wraps inside the module.",
-    customScale = 70,
-})
-
-local status = TextUiMod:create_text({
-    text = "Status: idle",
-    CustomYSize = 24,
-})
-
-status:Set({
-    text = "Status: ready",
-})
-
-local NotifyMod = Settings:create_module({
-    title = "Notifications",
-    description = "Info, success, warn, error",
-    flag = "mod_notify",
-    section = "left",
-
-    callback = function(state) end,
-})
-
-NotifyMod:create_button({
-    title = "Info",
-
-    callback = function()
-        Library.Notify.Info("Info", "Something happened", 3)
-    end,
-})
-
-NotifyMod:create_button({
-    title = "Success",
-
-    callback = function()
-        Library.Notify.Success("Success", "Done", 3)
-    end,
-})
-
-NotifyMod:create_button({
-    title = "Warn",
-
-    callback = function()
-        Library.Notify.Warn("Warning", "Be careful", 3)
-    end,
-})
-
-NotifyMod:create_button({
-    title = "Error",
-
-    callback = function()
-        Library.Notify.Error("Error", "Failed", 3)
-    end,
-})
-
-local ThemeMod = Settings:create_module({
-    title = "Theme",
-    description = "Theme and transparency",
-    flag = "mod_theme",
-    section = "right",
 
     callback = function(state) end,
 })
 
 ThemeMod:create_dropdown({
-    title = "Theme",
-    flag = "ui_theme",
+    title = "Available Themes",
+    flag = "theme_choice",
 
     options = Library.GetThemes(),
     maximum_options = 6,
@@ -429,9 +584,74 @@ ThemeMod:create_dropdown({
     end,
 })
 
-ThemeMod:create_slider({
-    title = "Transparency",
-    flag = "ui_transparency",
+ThemeMod:create_button({
+    title = "Restore PureBlack",
+
+    callback = function()
+        Library.SetTheme("PureBlack")
+    end,
+})
+
+local ThemeColors = Themes:create_module({
+    title = "Theme Colors",
+    description = "Customize individual UI colors",
+    flag = "theme_colors",
+    section = "right",
+
+    callback = function(state) end,
+})
+
+local initialColors = Library.GetThemeColors()
+
+local function createThemeColorPicker(title, flag, colorKey)
+    local defaultColor = initialColors[colorKey]
+
+    if typeof(defaultColor) ~= "Color3" then
+        warn("[Sora x Hikaru] Missing theme color:", colorKey)
+        return
+    end
+
+    return ThemeColors:create_colorpicker({
+        title = title,
+        flag = flag,
+
+        default = defaultColor,
+        notify = false,
+
+        callback = function(color)
+            if ready then
+                Library.SetThemeColor(colorKey, color)
+            end
+        end,
+    })
+end
+
+createThemeColorPicker("Background", "theme_background", "Background")
+createThemeColorPicker("Secondary Background", "theme_background_secondary", "BackgroundSecondary")
+createThemeColorPicker("Module Background", "theme_module_background", "ModuleBackground")
+createThemeColorPicker("Primary Text", "theme_text_primary", "TextPrimary")
+createThemeColorPicker("Secondary Text", "theme_text_secondary", "TextSecondary")
+createThemeColorPicker("Accent", "theme_accent", "Accent")
+createThemeColorPicker("Accent Hover", "theme_accent_hover", "AccentHover")
+createThemeColorPicker("Border", "theme_stroke", "Stroke")
+createThemeColorPicker("Divider", "theme_divider", "Divider")
+createThemeColorPicker("Toggle Off", "theme_toggle_off", "ToggleOff")
+createThemeColorPicker("Card Background", "theme_card", "Card")
+
+-- Appearance settings
+
+local Appearance = Themes:create_module({
+    title = "Appearance",
+    description = "Transparency and background",
+    flag = "theme_appearance",
+    section = "left",
+
+    callback = function(state) end,
+})
+
+Appearance:create_slider({
+    title = "Window Transparency",
+    flag = "theme_transparency",
 
     minimum_value = 0,
     maximum_value = 90,
@@ -449,138 +669,308 @@ ThemeMod:create_slider({
     end,
 })
 
-local ThemeColorsMod = Settings:create_module({
-    title = "Theme Colors",
-    description = "Customize your Silver Black theme",
-    flag = "mod_theme_colors",
+Appearance:create_button({
+    title = "Set Image Background",
+
+    callback = function()
+        Window:SetImageBackground(
+            "rbxassetid://76051962811019",
+            "Crop",
+            0.7
+        )
+    end,
+})
+
+-- Settings tab
+
+local Settings = Window:create_tab("Settings", "settings")
+
+-- Notification examples
+
+local Notifications = Settings:create_module({
+    title = "Notifications",
+    description = "Test notification types and styles",
+    flag = "settings_notifications",
     section = "left",
 
     callback = function(state) end,
 })
 
-local initialColors = Library.GetThemeColors()
+Notifications:create_button({
+    title = "Info Notification",
 
-local function createThemeColorPicker(title, flag, colorKey)
-    local defaultColor = initialColors[colorKey]
+    callback = function()
+        Library.Notify.Info(
+            "Information",
+            "This is an information notification.",
+            3
+        )
+    end,
+})
 
-    if typeof(defaultColor) ~= "Color3" then
-        warn("[Sora x Hikaru] Missing theme color:", colorKey)
-        return
-    end
+Notifications:create_button({
+    title = "Success Notification",
 
-    return ThemeColorsMod:create_colorpicker({
-        title = title,
-        flag = flag,
+    callback = function()
+        Library.Notify.Success(
+            "Success",
+            "Your action was completed.",
+            3
+        )
+    end,
+})
 
-        default = defaultColor,
-        notify = false,
+Notifications:create_button({
+    title = "Warning Notification",
 
-        callback = function(color)
-            if ready then
-                Library.SetThemeColor(colorKey, color)
-            end
-        end,
-    })
-end
+    callback = function()
+        Library.Notify.Warn(
+            "Warning",
+            "Please check this message.",
+            3
+        )
+    end,
+})
 
-createThemeColorPicker(
-    "Background",
-    "theme_background",
-    "Background"
-)
+Notifications:create_button({
+    title = "Error Notification",
 
-createThemeColorPicker(
-    "Secondary Background",
-    "theme_background_secondary",
-    "BackgroundSecondary"
-)
+    callback = function()
+        Library.Notify.Error(
+            "Error",
+            "Something went wrong.",
+            3
+        )
+    end,
+})
 
-createThemeColorPicker(
-    "Module Background",
-    "theme_module_background",
-    "ModuleBackground"
-)
+Notifications:create_dropdown({
+    title = "Notification Style",
+    flag = "settings_notify_style",
 
-createThemeColorPicker(
-    "Primary Text",
-    "theme_text_primary",
-    "TextPrimary"
-)
+    options = {
+        "new",
+        "old",
+        "dynamic",
+    },
 
-createThemeColorPicker(
-    "Secondary Text",
-    "theme_text_secondary",
-    "TextSecondary"
-)
+    maximum_options = 3,
 
-createThemeColorPicker(
-    "Slider / Range Slider Accent",
-    "theme_slider_accent",
-    "Accent"
-)
+    callback = function(mode)
+        if ready then
+            Library.SetNotifyMode(mode)
+        end
+    end,
+})
 
-createThemeColorPicker(
-    "Accent Hover",
-    "theme_accent_hover",
-    "AccentHover"
-)
+Notifications:create_button({
+    title = "Dynamic Island Live Activity",
 
-createThemeColorPicker(
-    "Border",
-    "theme_stroke",
-    "Stroke"
-)
+    callback = function()
+        if Library.GetNotifyMode() ~= "dynamic" then
+            Library.Notify.Info(
+                "Dynamic Island",
+                "Select the dynamic notification style first.",
+                3
+            )
+            return
+        end
 
-createThemeColorPicker(
-    "Divider",
-    "theme_divider",
-    "Divider"
-)
+        local island = Library.GetDynamicIsland()
 
-createThemeColorPicker(
-    "Toggle Off",
-    "theme_toggle_off",
-    "ToggleOff"
-)
+        if island then
+            island:LiveActivity(
+                "Downloading",
+                "Fetching data...",
+                5,
+                "download"
+            )
+        end
+    end,
+})
 
-createThemeColorPicker(
-    "Card Background",
-    "theme_card",
-    "Card"
-)
+Notifications:create_button({
+    title = "Notification With Icon",
 
-local ConfigMod = Settings:create_module({
-    title = "Config",
-    description = "Save / export / reset",
-    flag = "mod_config",
+    callback = function()
+        Library.Notify.Send({
+            title = "Sora x Hikaru",
+            text = "This notification uses a Lucide icon.",
+            duration = 4,
+            type = "info",
+            icon = "rocket",
+        })
+    end,
+})
+
+-- Dialog examples
+
+local Dialogs = Settings:create_module({
+    title = "Dialogs",
+    description = "Confirmation dialog examples",
+    flag = "settings_dialogs",
     section = "right",
 
     callback = function(state) end,
 })
 
-ConfigMod:create_button({
-    title = "Save",
+Dialogs:create_button({
+    title = "Open Confirmation Dialog",
+
+    callback = function()
+        Window:Dialog({
+            Icon = "triangle-alert",
+            IconThemed = true,
+
+            Title = "Reset Configuration?",
+            Content = "This action cannot be undone.",
+
+            Dismissible = true,
+
+            Buttons = {
+                {
+                    Title = "Cancel",
+                    Variant = "Secondary",
+                },
+
+                {
+                    Title = "Reset",
+                    Variant = "Destructive",
+                    Icon = "trash-2",
+
+                    Callback = function()
+                        Library.Notify.Success(
+                            "Configuration",
+                            "Reset confirmed.",
+                            2
+                        )
+                    end,
+                },
+            },
+        })
+    end,
+})
+
+-- Progress bar
+
+local Loading = Settings:ProgressBar({
+    Title = "Loading",
+    Desc = "Loading data...",
+    Icon = "loader",
+
+    Value = {
+        Min = 0,
+        Max = 100,
+        Default = 0,
+    },
+
+    Visible = false,
+    AutoHide = true,
+
+    OnComplete = function()
+        Library.Notify.Success(
+            "Completed",
+            "Loading finished.",
+            2
+        )
+    end,
+})
+
+local Progress = Settings:create_module({
+    title = "Progress Bar",
+    description = "Progress bar controls",
+    flag = "settings_progress",
+    section = "left",
+
+    callback = function(state) end,
+})
+
+Progress:create_button({
+    title = "Run Progress Bar",
+
+    callback = function()
+        Loading:Reset()
+        Loading:Run(5)
+    end,
+})
+
+-- General settings
+
+local General = Settings:create_module({
+    title = "General",
+    description = "Watermark and search settings",
+    flag = "settings_general",
+    section = "right",
+
+    callback = function(state) end,
+})
+
+General:create_checkbox({
+    title = "Show Watermark",
+    flag = "settings_watermark",
+
+    callback = function(state)
+        Library.SetWatermark(state)
+    end,
+})
+
+General:create_button({
+    title = "Search For Speed",
+
+    callback = function()
+        Window:Search("speed")
+    end,
+})
+
+General:create_paragraph({
+    title = "Keyboard Shortcuts",
+    text = "Insert: Show or hide the UI. Ctrl + F: Open search.",
+})
+
+-- Configuration settings
+
+local Config = Settings:create_module({
+    title = "Configuration",
+    description = "Save, load, export and reset settings",
+    flag = "settings_config",
+    section = "left",
+
+    callback = function(state) end,
+})
+
+Config:create_button({
+    title = "Save Configuration",
 
     callback = function()
         Library.SaveConfig()
     end,
 })
 
-ConfigMod:create_button({
-    title = "Export",
+Config:create_button({
+    title = "Load Configuration",
+
+    callback = function()
+        Library.LoadConfig()
+    end,
+})
+
+Config:create_button({
+    title = "Export Configuration",
 
     callback = function()
         Library.ExportConfig()
     end,
 })
 
-ConfigMod:create_button({
-    title = "Reset",
+Config:create_button({
+    title = "Reset Configuration",
 
     callback = function()
         Library.ResetConfig()
     end,
 })
+
+-- Load UI
 
 Window:load()
 
@@ -590,6 +980,6 @@ ready = true
 
 Library.Notify.Success(
     "Sora x Hikaru",
-    "Loaded. Press Insert to hide / show the UI.",
+    "PureBlack loaded successfully. Press Insert to hide or show the UI.",
     4
 )
