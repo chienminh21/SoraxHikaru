@@ -23,6 +23,11 @@ A modular Roblox UI library with customizable themes, tabs, modules, controls, n
 17. Keybind Management
 18. Cleanup
 
+## Test Example.lua
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/chienminh21/SoraxHikaru/refs/heads/main/Lib/Example.lua"))()
+
+```
 ## 1\. Installation
 
 Load the library from your GitHub repository:
